@@ -10,6 +10,13 @@
 
 ArchetypeSelect_Script::
 	lockall
+@ Wait for the "BATTLE FRONTIER" location-name banner to finish animating in,
+@ then dismiss it before opening any windows. Without this, the banner's slide
+@ animation breaks the multichoice scrollbox graphics.
+	delay 120
+	special HideMapNamePopUpWindow
+	delay 10
+
 	msgbox ArchetypeSelect_Text_Intro, MSGBOX_DEFAULT
 
 @ --- Choose archetype ---
@@ -40,7 +47,10 @@ ArchetypeSelect_Text_PleaseWait:
 	.string "This can take a moment.$"
 
 ArchetypeSelect_Text_Confirm:
-	.string "Your team is ready.\p"
-	.string "Check your PC for the rest\n"
-	.string "of the teams!\p"
+	.string "Your team is ready!\p"
+	.string "Additional teams and POKéMON\n"
+	.string "are waiting in your PC boxes.\p"
+	.string "Press R + START in the overworld\n"
+	.string "to open the debug menu for more\l"
+	.string "options.\p"
 	.string "Good luck, Trainer!$"

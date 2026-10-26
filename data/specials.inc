@@ -549,3 +549,4 @@ gSpecials::
 	def_special GivePresetParty_Rain
 	def_special GivePresetParty_Sun
 	def_special GivePresetParty_Sand
+	def_special HideMapNamePopUpWindow
