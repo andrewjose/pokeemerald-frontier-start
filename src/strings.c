@@ -1821,6 +1821,7 @@ const u8 gText_Berry[] = _("BERRY");
 const u8 gText_Berries[] = _("BERRIES");
 
 // Archetype selection menu strings (Battle Frontier Start Mod)
+const u8 gText_ArchetypeRecommended[]= _("RECOMMENDED");
 const u8 gText_ArchetypeOffense[]    = _("OFFENSE");
 const u8 gText_ArchetypeStall[]      = _("STALL");
 const u8 gText_ArchetypeBalanced[]   = _("BALANCED");
