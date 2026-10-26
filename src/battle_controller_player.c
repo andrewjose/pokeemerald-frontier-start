@@ -4,6 +4,7 @@
 #include "battle_arena.h"
 #include "battle_controllers.h"
 #include "battle_dome.h"
+#include "battle_info_screen.h"
 #include "battle_interface.h"
 #include "battle_message.h"
 #include "battle_setup.h"
@@ -105,6 +106,14 @@ static void MoveSelectionDisplayMoveNames(void);
 static void HandleMoveSwitching(void);
 static void SwitchIn_HandleSoundAndEnd(void);
 static void WaitForMonSelection(void);
+static void OpenBattleInfoFromActionMenu(void);
+static void OpenBattleInfoFromMoveMenu(void);
+static void WaitForBattleInfoExit_Action(void);
+static void WaitForBattleInfoExit_Move(void);
+static void WaitForFadeThenChooseAction(void);
+static void WaitForFadeThenChooseMove(void);
+static void HandleChooseActionAfterDma3(void);
+static void HandleChooseMoveAfterDma3(void);
 static void CompleteWhenChoseItem(void);
 static void Task_LaunchLvlUpAnim(u8);
 static void Task_PrepareToGiveExpWithExpBar(u8);
@@ -241,6 +250,20 @@ static void HandleInputChooseAction(void)
         gPlayerDpadHoldFrames++;
     else
         gPlayerDpadHoldFrames = 0;
+
+    // Battle Info Screen: L+R opens the stats/IV/EV viewer.
+    // Checked before A so that L doesn't select an action in L=A mode.
+    switch (BattleInfoScreen_CheckCombo())
+    {
+    case BATTLE_INFO_COMBO_OPEN:
+        PlaySE(SE_SELECT);
+        BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+        gBattlerControllerFuncs[gActiveBattler] = OpenBattleInfoFromActionMenu;
+        gBattlerInMenuId = gActiveBattler;
+        return;
+    case BATTLE_INFO_COMBO_WAIT:
+        return;
+    }
 
     if (JOY_NEW(A_BUTTON))
     {
@@ -477,6 +500,19 @@ static void HandleInputChooseMove(void)
         gPlayerDpadHoldFrames++;
     else
         gPlayerDpadHoldFrames = 0;
+
+    // Battle Info Screen: L+R opens the stats/IV/EV viewer.
+    switch (BattleInfoScreen_CheckCombo())
+    {
+    case BATTLE_INFO_COMBO_OPEN:
+        PlaySE(SE_SELECT);
+        BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+        gBattlerControllerFuncs[gActiveBattler] = OpenBattleInfoFromMoveMenu;
+        gBattlerInMenuId = gActiveBattler;
+        return;
+    case BATTLE_INFO_COMBO_WAIT:
+        return;
+    }
 
     if (JOY_NEW(A_BUTTON))
     {
@@ -1390,6 +1426,73 @@ static void CompleteWhenChoseItem(void)
         BtlController_EmitOneReturnValue(B_COMM_TO_ENGINE, gSpecialVar_ItemId);
         PlayerBufferExecCompleted();
     }
+}
+
+// Battle Info Screen
+// The screen is entered like the in-battle Bag: fade out, free the battle
+// windows, hand control to the menu, and rebuild the battle screen with
+// ReshowBattleScreenAfterMenu on the way back. The controller then redraws the
+// menu it came from and resumes waiting for input; no battle command is sent.
+static void OpenBattleInfoFromActionMenu(void)
+{
+    if (!gPaletteFade.active)
+    {
+        gBattlerControllerFuncs[gActiveBattler] = WaitForBattleInfoExit_Action;
+        FreeAllWindowBuffers();
+        ShowBattleInfoScreen(CB2_SetUpReshowBattleScreenAfterMenu);
+    }
+}
+
+static void OpenBattleInfoFromMoveMenu(void)
+{
+    if (!gPaletteFade.active)
+    {
+        gBattlerControllerFuncs[gActiveBattler] = WaitForBattleInfoExit_Move;
+        FreeAllWindowBuffers();
+        ShowBattleInfoScreen(CB2_SetUpReshowBattleScreenAfterMenu);
+    }
+}
+
+static void WaitForBattleInfoExit_Action(void)
+{
+    if (gMain.callback2 == BattleMainCB2)
+    {
+        s32 i;
+
+        // Same drawing as PlayerHandleChooseAction
+        BattlePutTextOnWindow(gText_BattleMenu, B_WIN_ACTION_MENU);
+        for (i = 0; i < 4; i++)
+            ActionSelectionDestroyCursorAt(i);
+        ActionSelectionCreateCursorAt(gActionSelectionCursor[gActiveBattler], 0);
+        BattleStringExpandPlaceholdersToDisplayedString(gText_WhatWillPkmnDo);
+        BattlePutTextOnWindow(gDisplayedStringBattle, B_WIN_ACTION_PROMPT);
+        gBattle_BG0_X = 0;
+        gBattle_BG0_Y = DISPLAY_HEIGHT;
+        gBattlerControllerFuncs[gActiveBattler] = WaitForFadeThenChooseAction;
+    }
+}
+
+static void WaitForFadeThenChooseAction(void)
+{
+    if (!gPaletteFade.active)
+        gBattlerControllerFuncs[gActiveBattler] = HandleChooseActionAfterDma3;
+}
+
+static void WaitForBattleInfoExit_Move(void)
+{
+    if (gMain.callback2 == BattleMainCB2)
+    {
+        InitMoveSelectionsVarsAndStrings();
+        gBattle_BG0_X = 0;
+        gBattle_BG0_Y = DISPLAY_HEIGHT * 2;
+        gBattlerControllerFuncs[gActiveBattler] = WaitForFadeThenChooseMove;
+    }
+}
+
+static void WaitForFadeThenChooseMove(void)
+{
+    if (!gPaletteFade.active)
+        gBattlerControllerFuncs[gActiveBattler] = HandleChooseMoveAfterDma3;
 }
 
 static void CompleteOnSpecialAnimDone(void)
