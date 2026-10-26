@@ -3027,6 +3027,7 @@ extern const u8 gText_PkmnsNickname[];
 extern const u8 gText_TellHimTheWords[];
 
 // Archetype selection menu strings (Battle Frontier Start Mod)
+extern const u8 gText_ArchetypeRecommended[];
 extern const u8 gText_ArchetypeOffense[];
 extern const u8 gText_ArchetypeStall[];
 extern const u8 gText_ArchetypeBalanced[];
