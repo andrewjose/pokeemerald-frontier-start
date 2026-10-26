@@ -9,16 +9,33 @@
 #include "constants/pokemon.h"
 #include "constants/characters.h"
 
-#define ARCHETYPE_OFFENSE      0
-#define ARCHETYPE_STALL        1
-#define ARCHETYPE_BALANCED     2
-#define ARCHETYPE_SPEED        3
-#define ARCHETYPE_TRICKROOM    4
-#define ARCHETYPE_RAIN         5
-#define ARCHETYPE_SUN          6
-#define ARCHETYPE_SAND         7
-#define NUM_ARCHETYPES         8
-#define PRESET_PARTY_SIZE      6
+#define ARCHETYPE_OFFENSE        0
+#define ARCHETYPE_STALL          1
+#define ARCHETYPE_BALANCED       2
+#define ARCHETYPE_SPEED          3
+#define ARCHETYPE_TRICKROOM      4
+#define ARCHETYPE_RAIN           5
+#define ARCHETYPE_SUN            6
+#define ARCHETYPE_SAND           7
+#define ARCHETYPE_TOWER_FIGHTERS 8
+#define ARCHETYPE_TOWER_SAMPLES  9
+#define NUM_ARCHETYPES_BASE      8     /* archetypes that have per-level box pairs */
+#define NUM_ARCHETYPES           10    /* total archetype menu entries */
+#define PRESET_PARTY_SIZE        6
+
+/* Box layout:
+   0..7   v13 archetype boxes (lv50 in slots 0-5, lv100 in slots 6-11)
+   8      Legendaries lv50
+   9      Legendaries lv100
+   10     Tower individual fighters lv50    (30 mons from PDF pages 5-8)
+   11     Tower fighters overflow lv50      (Registeel/Rhydon/Heracross-Adamant)
+   12     Tower sample teams (Blue/Havoc/Steamroller, both levels, 20 slots)
+   13     Tower individual fighters lv100   (same 30 mons as box 10, lv100)
+*/
+#define BOX_TOWER_FIGHTERS_L50   10
+#define BOX_TOWER_FIGHTERS_OVRF  11
+#define BOX_TOWER_SAMPLES        12
+#define BOX_TOWER_FIGHTERS_L100  13
 
 static const u8 sBoxName_Offense[]   = {CHAR_O, CHAR_F, CHAR_F, CHAR_E, CHAR_N, CHAR_S, CHAR_E, EOS};
 static const u8 sBoxName_Stall[]     = {CHAR_S, CHAR_T, CHAR_A, CHAR_L, CHAR_L, EOS};
@@ -28,19 +45,127 @@ static const u8 sBoxName_TrickRoom[] = {CHAR_T, CHAR_R, CHAR_I, CHAR_C, CHAR_K, 
 static const u8 sBoxName_Rain[]      = {CHAR_R, CHAR_A, CHAR_I, CHAR_N, EOS};
 static const u8 sBoxName_Sun[]       = {CHAR_S, CHAR_U, CHAR_N, EOS};
 static const u8 sBoxName_Sand[]      = {CHAR_S, CHAR_A, CHAR_N, CHAR_D, EOS};
+/* New tower box names */
+static const u8 sBoxName_FightersL50[]  = {CHAR_F, CHAR_I, CHAR_G, CHAR_H, CHAR_T, CHAR_E, CHAR_R, CHAR_S, EOS};
+static const u8 sBoxName_FightersL100[] = {CHAR_F, CHAR_I, CHAR_G, CHAR_H, CHAR_T, CHAR_1, CHAR_0, CHAR_0, EOS};
+static const u8 sBoxName_FightersOvrf[] = {CHAR_F, CHAR_I, CHAR_G, CHAR_H, CHAR_T, CHAR_S, CHAR_SPACE, CHAR_2, EOS};
+static const u8 sBoxName_TowerSamples[] = {CHAR_S, CHAR_A, CHAR_M, CHAR_P, CHAR_L, CHAR_E, CHAR_S, EOS};
 
-static const u8 *const sBoxNames[NUM_ARCHETYPES] = {
+static const u8 *const sBoxNames[NUM_ARCHETYPES_BASE] = {
     sBoxName_Offense, sBoxName_Stall,  sBoxName_Balanced, sBoxName_Speed,
     sBoxName_TrickRoom, sBoxName_Rain, sBoxName_Sun,      sBoxName_Sand,
 };
 
-static void DoAddMon(struct Pokemon *mon,
-                     u16 species, u8 level, u8 nature, u16 item,
-                     u16 move1, u16 move2, u16 move3, u16 move4,
-                     u8 hpEV, u8 atkEV, u8 defEV,
-                     u8 speEV, u8 spAtkEV, u8 spDefEV)
+/* Hidden Power type codes (use 0 to skip HP rigging — mon gets 31 IVs everywhere).
+   Values map to the type constant the mon's Hidden Power should be. */
+#define HP_TYPE_NONE      0
+#define HP_TYPE_FIGHTING  TYPE_FIGHTING
+#define HP_TYPE_FLYING    TYPE_FLYING
+#define HP_TYPE_POISON    TYPE_POISON
+#define HP_TYPE_GROUND    TYPE_GROUND
+#define HP_TYPE_ROCK      TYPE_ROCK
+#define HP_TYPE_BUG       TYPE_BUG
+#define HP_TYPE_GHOST     TYPE_GHOST
+#define HP_TYPE_STEEL     TYPE_STEEL
+#define HP_TYPE_FIRE      TYPE_FIRE
+#define HP_TYPE_WATER     TYPE_WATER
+#define HP_TYPE_GRASS     TYPE_GRASS
+#define HP_TYPE_ELECTRIC  TYPE_ELECTRIC
+#define HP_TYPE_PSYCHIC   TYPE_PSYCHIC
+#define HP_TYPE_ICE       TYPE_ICE
+#define HP_TYPE_DRAGON    TYPE_DRAGON
+#define HP_TYPE_DARK      TYPE_DARK
+
+/* For a given target Hidden Power type, returns the typeBits value (0..63)
+   that the engine's hiddenpowercalc formula maps to that type. We pick the
+   smallest value yielding the correct integer-division result; combined with
+   IV bit-1 always set (for max 70 power), this gives perfect HP. */
+static u8 GetTypeBitsForHPType(u8 type)
 {
-    CreateMon(mon, species, level, 31, TRUE, (u32)nature, OT_ID_PLAYER_ID, 0);
+    /* Pre-computed: typeBits = ceil(63 * idx / 15) where idx skips MYSTERY.
+       Indices: Fighting=0, Flying=1, Poison=2, Ground=3, Rock=4, Bug=5,
+                Ghost=6, Steel=7, Fire=8, Water=9, Grass=10, Electric=11,
+                Psychic=12, Ice=13, Dragon=14, Dark=15.
+       Verified: (15*tb)/63 + 1 (skip past MYSTERY if >=9) reproduces type. */
+    switch (type)
+    {
+    case TYPE_FIGHTING: return  0;
+    case TYPE_FLYING:   return  5;
+    case TYPE_POISON:   return  9;
+    case TYPE_GROUND:   return 13;
+    case TYPE_ROCK:     return 17;
+    case TYPE_BUG:      return 21;
+    case TYPE_GHOST:    return 26;
+    case TYPE_STEEL:    return 30;
+    case TYPE_FIRE:     return 34;
+    case TYPE_WATER:    return 38;
+    case TYPE_GRASS:    return 42;
+    case TYPE_ELECTRIC: return 47;
+    case TYPE_PSYCHIC:  return 51;
+    case TYPE_ICE:      return 55;
+    case TYPE_DRAGON:   return 59;
+    case TYPE_DARK:     return 63;
+    default:            return 63;  /* unreachable; defaults to Dark */
+    }
+}
+
+static void DoAddMonEx(struct Pokemon *mon,
+                       u16 species, u8 level, u8 nature, u16 item,
+                       u16 move1, u16 move2, u16 move3, u16 move4,
+                       u8 hpEV, u8 atkEV, u8 defEV,
+                       u8 speEV, u8 spAtkEV, u8 spDefEV,
+                       u8 hpType, bool8 shiny)
+{
+    u32 personality;
+
+    if (shiny)
+    {
+        // Find a personality value such that:
+        //   personality % 25 == nature           (preserves the desired nature)
+        //   HIHALF(personality) ^ LOHALF(personality) == HIHALF(otId) ^ LOHALF(otId)
+        //                                        (forces shiny: XOR sum == 0 < 8)
+        // We start at `nature` and step by 25 — this preserves the modulo and just
+        // searches across high bits until the XOR matches. Expected ~32K iterations.
+        u32 otId = gSaveBlock2Ptr->playerTrainerId[0]
+                 | (gSaveBlock2Ptr->playerTrainerId[1] << 8)
+                 | (gSaveBlock2Ptr->playerTrainerId[2] << 16)
+                 | (gSaveBlock2Ptr->playerTrainerId[3] << 24);
+        u32 K = (otId >> 16) ^ (otId & 0xFFFF);
+        personality = nature;
+        while (((personality >> 16) ^ (personality & 0xFFFF)) != K)
+            personality += 25;
+    }
+    else
+    {
+        // Vanilla behavior: use nature as personality (matches v13 behavior).
+        // CreateMon's nature-from-personality calculation will return the same nature.
+        personality = nature;
+    }
+
+    CreateMon(mon, species, level, 31, TRUE, personality, OT_ID_PLAYER_ID, 0);
+
+    /* If a Hidden Power type was requested, override the IVs to produce that
+       type at base power 70. typeBits selects the type via LSB of each IV;
+       bit 1 of each IV is forced to 1 for max power. So per stat:
+         IV = (typeBit << 0) | (1 << 1) | (top_bits)
+       We use (typeBit ? 31 : 30) which gives bit-0 = typeBit and bit-1 = 1 either way. */
+    if (hpType != HP_TYPE_NONE)
+    {
+        u8 tb = GetTypeBitsForHPType(hpType);
+        u8 hpIv  = (tb & (1 << 0)) ? 31 : 30;
+        u8 atkIv = (tb & (1 << 1)) ? 31 : 30;
+        u8 defIv = (tb & (1 << 2)) ? 31 : 30;
+        u8 speIv = (tb & (1 << 3)) ? 31 : 30;
+        u8 spaIv = (tb & (1 << 4)) ? 31 : 30;
+        u8 spdIv = (tb & (1 << 5)) ? 31 : 30;
+        SetMonData(mon, MON_DATA_HP_IV,    &hpIv);
+        SetMonData(mon, MON_DATA_ATK_IV,   &atkIv);
+        SetMonData(mon, MON_DATA_DEF_IV,   &defIv);
+        SetMonData(mon, MON_DATA_SPEED_IV, &speIv);
+        SetMonData(mon, MON_DATA_SPATK_IV, &spaIv);
+        SetMonData(mon, MON_DATA_SPDEF_IV, &spdIv);
+    }
+
     SetMonData(mon, MON_DATA_HELD_ITEM, &item);
     SetMonData(mon, MON_DATA_MOVE1,     &move1);
     SetMonData(mon, MON_DATA_MOVE2,     &move2);
@@ -61,6 +186,20 @@ static void DoAddMon(struct Pokemon *mon,
     CalculateMonStats(mon);
 }
 
+/* Original DoAddMon — no HP type rigging */
+/* DoAddMon — vanilla, non-shiny. Used by v13 archetype fillers. */
+static void DoAddMon(struct Pokemon *mon,
+                     u16 species, u8 level, u8 nature, u16 item,
+                     u16 move1, u16 move2, u16 move3, u16 move4,
+                     u8 hpEV, u8 atkEV, u8 defEV,
+                     u8 speEV, u8 spAtkEV, u8 spDefEV)
+{
+    DoAddMonEx(mon, species, level, nature, item,
+               move1, move2, move3, move4,
+               hpEV, atkEV, defEV, speEV, spAtkEV, spDefEV,
+               HP_TYPE_NONE, FALSE);
+}
+
 static void AddPresetMon(u8 slot,
                          u16 species, u8 level, u8 nature, u16 item,
                          u16 move1, u16 move2, u16 move3, u16 move4,
@@ -76,6 +215,7 @@ static void AddPresetMon(u8 slot,
 // that agbcc can mishandle across a loop of 48 calls.
 static struct Pokemon sBoxMonBuf;
 
+/* AddBoxMon — vanilla, non-shiny. Used by v13 archetype boxes. */
 static void AddBoxMon(u8 boxId, u8 boxSlot,
                       u16 species, u8 level, u8 nature, u16 item,
                       u16 move1, u16 move2, u16 move3, u16 move4,
@@ -85,6 +225,35 @@ static void AddBoxMon(u8 boxId, u8 boxSlot,
     DoAddMon(&sBoxMonBuf, species, level, nature, item,
              move1, move2, move3, move4,
              hpEV, atkEV, defEV, speEV, spAtkEV, spDefEV);
+    SetBoxMonAt(boxId, boxSlot, &sBoxMonBuf.box);
+}
+
+/* AddBoxMonShiny — forces shiny but no HP rigging. Used by Tower fighters/samples. */
+static void AddBoxMonShiny(u8 boxId, u8 boxSlot,
+                           u16 species, u8 level, u8 nature, u16 item,
+                           u16 move1, u16 move2, u16 move3, u16 move4,
+                           u8 hpEV, u8 atkEV, u8 defEV,
+                           u8 speEV, u8 spAtkEV, u8 spDefEV)
+{
+    DoAddMonEx(&sBoxMonBuf, species, level, nature, item,
+               move1, move2, move3, move4,
+               hpEV, atkEV, defEV, speEV, spAtkEV, spDefEV,
+               HP_TYPE_NONE, TRUE);
+    SetBoxMonAt(boxId, boxSlot, &sBoxMonBuf.box);
+}
+
+/* AddBoxMonHP — forces shiny AND rigs IVs to a specific Hidden Power type. */
+static void AddBoxMonHP(u8 boxId, u8 boxSlot,
+                        u16 species, u8 level, u8 nature, u16 item,
+                        u16 move1, u16 move2, u16 move3, u16 move4,
+                        u8 hpEV, u8 atkEV, u8 defEV,
+                        u8 speEV, u8 spAtkEV, u8 spDefEV,
+                        u8 hpType)
+{
+    DoAddMonEx(&sBoxMonBuf, species, level, nature, item,
+               move1, move2, move3, move4,
+               hpEV, atkEV, defEV, speEV, spAtkEV, spDefEV,
+               hpType, TRUE);
     SetBoxMonAt(boxId, boxSlot, &sBoxMonBuf.box);
 }
 
@@ -554,22 +723,24 @@ static void FillSand(u8 level, u8 boxId, u8 slotBase)
    ------------------------------------------------------------------------- */
 typedef void (*ArchetypeFiller)(u8 level, u8 boxId, u8 slotBase);
 
-static const ArchetypeFiller sFillers[NUM_ARCHETYPES] = {
+static const ArchetypeFiller sFillers[NUM_ARCHETYPES_BASE] = {
     FillOffense, FillStall,    FillBalanced, FillSpeed,
     FillTrickRoom, FillRain,   FillSun,      FillSand,
 };
 
-/* Forward declaration for FillLegendaryBox which is defined after GivePresetPartyAndFillBoxes */
+/* Forward declarations */
 static void FillLegendaryBox(u8 level, u8 boxId);
+static void FillTowerFightersBox(u8 level, u8 boxId);
+static void FillTowerFightersOverflowBox(u8 boxId);
+static void FillTowerSamplesBox(u8 boxId);
+static void FillPartyFromBox(u8 boxId);
 
 /* -------------------------------------------------------------------------
    Public entry point — called from script via `special GivePresetPartyAndFillBoxes`
    Script sets VAR_0x8004 = archetype index, VAR_0x8005 = level (50 or 100).
 
-   Party: chosen archetype at chosen level.
-   Boxes 0-7: each archetype's ALTERNATE level (the one not chosen for party).
-   So if you pick Offense lv50, Box 0 "OFFENSE" has the lv100 Offense team, and
-   all other boxes also have their lv100 teams.
+   Boxes are always filled the same way regardless of archetype choice.
+   What changes is the player's PARTY.
    ------------------------------------------------------------------------- */
 void GivePresetPartyAndFillBoxes(void)
 {
@@ -580,21 +751,51 @@ void GivePresetPartyAndFillBoxes(void)
     if (archetype >= NUM_ARCHETYPES)
         archetype = 0;
 
-    /* Fill party with chosen archetype + level */
-    sFillers[archetype](level, 0xFF, 0);
-
-    /* Fill all 8 boxes: lv50 in slots 0-5, lv100 in slots 6-11 */
-    for (i = 0; i < NUM_ARCHETYPES; i++)
+    /* Fill all 8 base archetype boxes: lv50 in slots 0-5, lv100 in slots 6-11 */
+    for (i = 0; i < NUM_ARCHETYPES_BASE; i++)
     {
         SetPresetBoxName(i, sBoxNames[i]);
         sFillers[i](50,  i, 0);  /* slots 0-5  */
         sFillers[i](100, i, 6);  /* slots 6-11 */
     }
 
-    /* Box 8: all legendaries/pseudos at lv50 (slots 0-22) */
+    /* Box 8/9: legendaries lv50/lv100 */
     FillLegendaryBox(50, 8);
-    /* Box 9: all legendaries/pseudos at lv100 (slots 0-22) */
     FillLegendaryBox(100, 9);
+
+    /* Boxes 10-13: Tower fighters & sample teams (from Conquer the Tower guide) */
+    FillTowerFightersBox(50,  BOX_TOWER_FIGHTERS_L50);
+    FillTowerFightersOverflowBox(BOX_TOWER_FIGHTERS_OVRF);
+    FillTowerSamplesBox(BOX_TOWER_SAMPLES);
+    FillTowerFightersBox(100, BOX_TOWER_FIGHTERS_L100);
+
+    /* Now set the player's party based on chosen archetype */
+    if (archetype < NUM_ARCHETYPES_BASE)
+    {
+        sFillers[archetype](level, 0xFF, 0);
+    }
+    else if (archetype == ARCHETYPE_TOWER_FIGHTERS)
+    {
+        FillPartyFromBox((level == 100) ? BOX_TOWER_FIGHTERS_L100 : BOX_TOWER_FIGHTERS_L50);
+    }
+    else /* ARCHETYPE_TOWER_SAMPLES */
+    {
+        FillPartyFromBox(BOX_TOWER_SAMPLES);
+    }
+}
+
+/* Copies the first 6 mons of a box into the player party. */
+static void FillPartyFromBox(u8 boxId)
+{
+    u8 slot;
+    ZeroPlayerPartyMons();
+    for (slot = 0; slot < PARTY_SIZE; slot++)
+    {
+        struct BoxPokemon *src = GetBoxedMonPtr(boxId, slot);
+        BoxMonToMon(src, &gPlayerParty[slot]);
+        CalculateMonStats(&gPlayerParty[slot]);
+    }
+    gPlayerPartyCount = PARTY_SIZE;
 }
 
 /* =========================================================================
@@ -796,3 +997,226 @@ void GivePresetParty_TrickRoom(void)   { FillTrickRoom(50, 0xFF, 0); }
 void GivePresetParty_Rain(void)        { FillRain(50, 0xFF, 0); }
 void GivePresetParty_Sun(void)         { FillSun(50, 0xFF, 0); }
 void GivePresetParty_Sand(void)        { FillSand(50, 0xFF, 0); }
+
+/* =========================================================================
+   TOWER FIGHTERS BOX  (from "Conquer the Tower" guide, pages 5-8)
+   30 mons. For sets listed with "Nature A or B", we generate both versions.
+   Default EVs use 252/252/4 in the mon's primary stats per its movepool/role,
+   since the guide doesn't specify EV spreads for individual fighters.
+   Items follow the guide's first-listed item.
+   ========================================================================= */
+
+static void FillTowerFightersBox(u8 level, u8 boxId)
+{
+    SetPresetBoxName(boxId, (level == 100) ? sBoxName_FightersL100 : sBoxName_FightersL50);
+
+    /* 1-2  Latios (Timid, Modest) @ Lum Berry */
+    AddBoxMonShiny(boxId, 0, SPECIES_LATIOS, level, NATURE_TIMID, ITEM_LUM_BERRY,
+        MOVE_CALM_MIND, MOVE_PSYCHIC, MOVE_THUNDERBOLT, MOVE_DRAGON_CLAW,
+        4, 0, 0, 252, 252, 0);
+    AddBoxMonShiny(boxId, 1, SPECIES_LATIOS, level, NATURE_MODEST, ITEM_LUM_BERRY,
+        MOVE_CALM_MIND, MOVE_PSYCHIC, MOVE_THUNDERBOLT, MOVE_DRAGON_CLAW,
+        4, 0, 0, 252, 252, 0);
+
+    /* 3-4  Metagross (Adamant, Jolly) @ Choice Band */
+    AddBoxMonShiny(boxId, 2, SPECIES_METAGROSS, level, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_EXPLOSION, MOVE_METEOR_MASH, MOVE_EARTHQUAKE, MOVE_SHADOW_BALL,
+        4, 252, 0, 252, 0, 0);
+    AddBoxMonShiny(boxId, 3, SPECIES_METAGROSS, level, NATURE_JOLLY, ITEM_CHOICE_BAND,
+        MOVE_EXPLOSION, MOVE_METEOR_MASH, MOVE_EARTHQUAKE, MOVE_SHADOW_BALL,
+        4, 252, 0, 252, 0, 0);
+
+    /* 5    Blissey (Bold) @ Leftovers */
+    AddBoxMonShiny(boxId, 4, SPECIES_BLISSEY, level, NATURE_BOLD, ITEM_LEFTOVERS,
+        MOVE_SOFT_BOILED, MOVE_ICE_BEAM, MOVE_SEISMIC_TOSS, MOVE_AROMATHERAPY,
+        252, 0, 252, 0, 4, 0);
+
+    /* 6-7  Salamence (Adamant, Jolly) @ Lum Berry */
+    AddBoxMonShiny(boxId, 5, SPECIES_SALAMENCE, level, NATURE_ADAMANT, ITEM_LUM_BERRY,
+        MOVE_AERIAL_ACE, MOVE_ROCK_SLIDE, MOVE_EARTHQUAKE, MOVE_DRAGON_DANCE,
+        4, 252, 0, 252, 0, 0);
+    AddBoxMonShiny(boxId, 6, SPECIES_SALAMENCE, level, NATURE_JOLLY, ITEM_LUM_BERRY,
+        MOVE_AERIAL_ACE, MOVE_ROCK_SLIDE, MOVE_EARTHQUAKE, MOVE_DRAGON_DANCE,
+        4, 252, 0, 252, 0, 0);
+
+    /* 8-10 Swampert (Brave, Sassy, Relaxed) @ Leftovers */
+    AddBoxMonShiny(boxId, 7, SPECIES_SWAMPERT, level, NATURE_BRAVE, ITEM_LEFTOVERS,
+        MOVE_SURF, MOVE_PROTECT, MOVE_ICE_BEAM, MOVE_EARTHQUAKE,
+        252, 128, 4, 0, 124, 0);
+    AddBoxMonShiny(boxId, 8, SPECIES_SWAMPERT, level, NATURE_SASSY, ITEM_LEFTOVERS,
+        MOVE_SURF, MOVE_PROTECT, MOVE_ICE_BEAM, MOVE_EARTHQUAKE,
+        252, 128, 4, 0, 124, 0);
+    AddBoxMonShiny(boxId, 9, SPECIES_SWAMPERT, level, NATURE_RELAXED, ITEM_LEFTOVERS,
+        MOVE_SURF, MOVE_PROTECT, MOVE_ICE_BEAM, MOVE_EARTHQUAKE,
+        252, 128, 4, 0, 124, 0);
+
+    /* 11-12 Snorlax (Careful, Adamant) @ Chesto Berry */
+    AddBoxMonShiny(boxId, 10, SPECIES_SNORLAX, level, NATURE_CAREFUL, ITEM_CHESTO_BERRY,
+        MOVE_REST, MOVE_CURSE, MOVE_BODY_SLAM, MOVE_EARTHQUAKE,
+        140, 96, 56, 0, 0, 216);
+    AddBoxMonShiny(boxId, 11, SPECIES_SNORLAX, level, NATURE_ADAMANT, ITEM_CHESTO_BERRY,
+        MOVE_REST, MOVE_CURSE, MOVE_BODY_SLAM, MOVE_EARTHQUAKE,
+        140, 252, 56, 0, 0, 60);
+
+    /* 13-14 Starmie (Modest, Timid) @ Petaya Berry */
+    AddBoxMonShiny(boxId, 12, SPECIES_STARMIE, level, NATURE_MODEST, ITEM_PETAYA_BERRY,
+        MOVE_SURF, MOVE_PSYCHIC, MOVE_ICE_BEAM, MOVE_THUNDERBOLT,
+        4, 0, 0, 252, 252, 0);
+    AddBoxMonShiny(boxId, 13, SPECIES_STARMIE, level, NATURE_TIMID, ITEM_PETAYA_BERRY,
+        MOVE_SURF, MOVE_PSYCHIC, MOVE_ICE_BEAM, MOVE_THUNDERBOLT,
+        4, 0, 0, 252, 252, 0);
+
+    /* 15-16 Latias (Timid, Modest) @ Lum Berry */
+    AddBoxMonShiny(boxId, 14, SPECIES_LATIAS, level, NATURE_TIMID, ITEM_LUM_BERRY,
+        MOVE_CALM_MIND, MOVE_SUBSTITUTE, MOVE_RECOVER, MOVE_DRAGON_CLAW,
+        4, 0, 0, 252, 252, 0);
+    AddBoxMonShiny(boxId, 15, SPECIES_LATIAS, level, NATURE_MODEST, ITEM_LUM_BERRY,
+        MOVE_CALM_MIND, MOVE_SUBSTITUTE, MOVE_RECOVER, MOVE_DRAGON_CLAW,
+        4, 0, 0, 252, 252, 0);
+
+    /* 17-18 Aerodactyl (Adamant, Jolly) @ Choice Band */
+    AddBoxMonShiny(boxId, 16, SPECIES_AERODACTYL, level, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_ROCK_SLIDE, MOVE_EARTHQUAKE, MOVE_AERIAL_ACE, MOVE_DOUBLE_EDGE,
+        4, 252, 0, 252, 0, 0);
+    AddBoxMonShiny(boxId, 17, SPECIES_AERODACTYL, level, NATURE_JOLLY, ITEM_CHOICE_BAND,
+        MOVE_ROCK_SLIDE, MOVE_EARTHQUAKE, MOVE_AERIAL_ACE, MOVE_DOUBLE_EDGE,
+        4, 252, 0, 252, 0, 0);
+
+    /* 19   Suicune (Bold) @ Chesto Berry */
+    AddBoxMonShiny(boxId, 18, SPECIES_SUICUNE, level, NATURE_BOLD, ITEM_CHESTO_BERRY,
+        MOVE_REST, MOVE_SURF, MOVE_SUBSTITUTE, MOVE_CALM_MIND,
+        252, 0, 132, 126, 0, 0);
+
+    /* 20-21 Gengar (Timid, Modest) @ Lum Berry */
+    AddBoxMonShiny(boxId, 19, SPECIES_GENGAR, level, NATURE_TIMID, ITEM_LUM_BERRY,
+        MOVE_TAUNT, MOVE_ICE_PUNCH, MOVE_FIRE_PUNCH, MOVE_GIGA_DRAIN,
+        4, 0, 0, 252, 252, 0);
+    AddBoxMonShiny(boxId, 20, SPECIES_GENGAR, level, NATURE_MODEST, ITEM_LUM_BERRY,
+        MOVE_TAUNT, MOVE_ICE_PUNCH, MOVE_FIRE_PUNCH, MOVE_GIGA_DRAIN,
+        4, 0, 0, 252, 252, 0);
+
+    /* 22-23 Flygon (Adamant, Naughty) @ Choice Band */
+    AddBoxMonShiny(boxId, 21, SPECIES_FLYGON, level, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_EARTHQUAKE, MOVE_ROCK_SLIDE, MOVE_FLAMETHROWER, MOVE_GIGA_DRAIN,
+        4, 252, 0, 252, 0, 0);
+    AddBoxMonShiny(boxId, 22, SPECIES_FLYGON, level, NATURE_NAUGHTY, ITEM_CHOICE_BAND,
+        MOVE_EARTHQUAKE, MOVE_ROCK_SLIDE, MOVE_FLAMETHROWER, MOVE_GIGA_DRAIN,
+        4, 252, 0, 252, 0, 0);
+
+    /* 24   Gyarados (Adamant) @ Leftovers — HP Flying */
+    AddBoxMonHP(boxId, 23, SPECIES_GYARADOS, level, NATURE_ADAMANT, ITEM_LEFTOVERS,
+        MOVE_SUBSTITUTE, MOVE_EARTHQUAKE, MOVE_DRAGON_DANCE, MOVE_HIDDEN_POWER,
+        4, 252, 0, 252, 0, 0, HP_TYPE_FLYING);
+
+    /* 25   Alakazam (Modest) @ Lum Berry — "Tri Punch" set */
+    AddBoxMonShiny(boxId, 24, SPECIES_ALAKAZAM, level, NATURE_MODEST, ITEM_LUM_BERRY,
+        MOVE_PSYCHIC, MOVE_ICE_PUNCH, MOVE_FIRE_PUNCH, MOVE_THUNDER_PUNCH,
+        4, 0, 0, 252, 252, 0);
+
+    /* 26   Zapdos (Modest) @ Leftovers — HP Grass */
+    AddBoxMonHP(boxId, 25, SPECIES_ZAPDOS, level, NATURE_MODEST, ITEM_LEFTOVERS,
+        MOVE_PROTECT, MOVE_THUNDERBOLT, MOVE_HIDDEN_POWER, MOVE_EXTRASENSORY,
+        4, 0, 0, 252, 252, 0, HP_TYPE_GRASS);
+
+    /* 27   Tauros (Jolly) @ Choice Band — HP Ghost */
+    AddBoxMonHP(boxId, 26, SPECIES_TAUROS, level, NATURE_JOLLY, ITEM_CHOICE_BAND,
+        MOVE_RETURN, MOVE_EARTHQUAKE, MOVE_HIDDEN_POWER, MOVE_DOUBLE_EDGE,
+        4, 252, 0, 252, 0, 0, HP_TYPE_GHOST);
+
+    /* 28   Slaking (Adamant) @ Choice Band */
+    AddBoxMonShiny(boxId, 27, SPECIES_SLAKING, level, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_HYPER_BEAM, MOVE_SHADOW_BALL, MOVE_AERIAL_ACE, MOVE_EARTHQUAKE,
+        4, 252, 0, 252, 0, 0);
+
+    /* Slot 28: Hariyama (Adamant) @ Sitrus Berry — Doubles Fake Out lead */
+    AddBoxMonShiny(boxId, 28, SPECIES_HARIYAMA, level, NATURE_ADAMANT, ITEM_SITRUS_BERRY,
+        MOVE_FAKE_OUT, MOVE_KNOCK_OFF, MOVE_ROCK_SLIDE, MOVE_BRICK_BREAK,
+        252, 252, 0, 4, 0, 0);
+
+    /* Slot 29: Heracross (Jolly) @ Choice Band — single slot, Adamant cut for space */
+    AddBoxMonShiny(boxId, 29, SPECIES_HERACROSS, level, NATURE_JOLLY, ITEM_CHOICE_BAND,
+        MOVE_MEGAHORN, MOVE_ROCK_SLIDE, MOVE_BRICK_BREAK, MOVE_FACADE,
+        4, 252, 0, 252, 0, 0);
+}
+
+/* =========================================================================
+   TOWER SAMPLE TEAMS BOX (10 mons × 2 levels = 20 slots)
+   Layout:
+     Slots 0-2   Team Blue   lv50  (Latios, Metagross, Swampert)
+     Slots 3-6   Team Havoc  lv50  (Gengar, Tauros, Latias, Metagross)
+     Slots 7-9   Team Steam  lv50  (Salamence, Snorlax, Suicune)
+     Slots 10-12 Team Blue   lv100
+     Slots 13-16 Team Havoc  lv100
+     Slots 17-19 Team Steam  lv100
+   ========================================================================= */
+
+static void FillTowerSamplesAtLevel(u8 boxId, u8 baseSlot, u8 level)
+{
+    /* TEAM BLUE */
+    AddBoxMonShiny(boxId, baseSlot + 0, SPECIES_LATIOS, level, NATURE_TIMID, ITEM_LUM_BERRY,
+        MOVE_CALM_MIND, MOVE_PSYCHIC, MOVE_THUNDERBOLT, MOVE_DRAGON_CLAW,
+        40, 0, 0, 218, 252, 0);
+    AddBoxMonShiny(boxId, baseSlot + 1, SPECIES_METAGROSS, level, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_EXPLOSION, MOVE_EARTHQUAKE, MOVE_SHADOW_BALL, MOVE_METEOR_MASH,
+        62, 236, 0, 204, 0, 8);
+    AddBoxMonShiny(boxId, baseSlot + 2, SPECIES_SWAMPERT, level, NATURE_BRAVE, ITEM_LEFTOVERS,
+        MOVE_PROTECT, MOVE_SURF, MOVE_ICE_BEAM, MOVE_EARTHQUAKE,
+        240, 136, 0, 84, 48, 2);
+
+    /* TEAM HAVOC */
+    AddBoxMonShiny(boxId, baseSlot + 3, SPECIES_GENGAR, level, NATURE_TIMID, ITEM_LUM_BERRY,
+        MOVE_TAUNT, MOVE_ICE_PUNCH, MOVE_FIRE_PUNCH, MOVE_GIGA_DRAIN,
+        36, 0, 0, 220, 252, 0);
+    AddBoxMonHP(boxId, baseSlot + 4, SPECIES_TAUROS, level, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_RETURN, MOVE_EARTHQUAKE, MOVE_DOUBLE_EDGE, MOVE_HIDDEN_POWER,
+        42, 252, 0, 216, 0, 0, HP_TYPE_GHOST);
+    AddBoxMonHP(boxId, baseSlot + 5, SPECIES_LATIAS, level, NATURE_TIMID, ITEM_PETAYA_BERRY,
+        MOVE_PSYCHIC, MOVE_ICE_BEAM, MOVE_THUNDERBOLT, MOVE_HIDDEN_POWER,
+        16, 0, 16, 226, 252, 0, HP_TYPE_FIRE);
+    AddBoxMonShiny(boxId, baseSlot + 6, SPECIES_METAGROSS, level, NATURE_ADAMANT, ITEM_LEFTOVERS,
+        MOVE_EXPLOSION, MOVE_EARTHQUAKE, MOVE_SHADOW_BALL, MOVE_METEOR_MASH,
+        62, 236, 0, 204, 0, 8);
+
+    /* TEAM STEAMROLLER */
+    AddBoxMonShiny(boxId, baseSlot + 7, SPECIES_SALAMENCE, level, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_ROCK_SLIDE, MOVE_AERIAL_ACE, MOVE_EARTHQUAKE, MOVE_BRICK_BREAK,
+        0, 252, 6, 252, 0, 0);
+    AddBoxMonShiny(boxId, baseSlot + 8, SPECIES_SNORLAX, level, NATURE_CAREFUL, ITEM_CHESTO_BERRY,
+        MOVE_REST, MOVE_CURSE, MOVE_BODY_SLAM, MOVE_EARTHQUAKE,
+        140, 96, 56, 0, 0, 216);
+    AddBoxMonShiny(boxId, baseSlot + 9, SPECIES_SUICUNE, level, NATURE_BOLD, ITEM_LEFTOVERS,
+        MOVE_SURF, MOVE_REST, MOVE_SUBSTITUTE, MOVE_CALM_MIND,
+        252, 0, 132, 126, 0, 0);
+}
+
+static void FillTowerSamplesBox(u8 boxId)
+{
+    SetPresetBoxName(boxId, sBoxName_TowerSamples);
+    FillTowerSamplesAtLevel(boxId, 0, 50);
+    FillTowerSamplesAtLevel(boxId, 10, 100);
+}
+
+/* =========================================================================
+   TOWER FIGHTERS OVERFLOW BOX (lv50)
+   The 3 sets that didn't fit in box 10: Registeel, Rhydon, Heracross-Adamant.
+   ========================================================================= */
+
+static void FillTowerFightersOverflowBox(u8 boxId)
+{
+    SetPresetBoxName(boxId, sBoxName_FightersOvrf);
+
+    /* Registeel (Careful) @ Chesto Berry — Curse-Amnesia tank, HP Steel */
+    AddBoxMonHP(boxId, 0, SPECIES_REGISTEEL, 50, NATURE_CAREFUL, ITEM_CHESTO_BERRY,
+        MOVE_AMNESIA, MOVE_CURSE, MOVE_SUBSTITUTE, MOVE_HIDDEN_POWER,
+        252, 0, 0, 0, 0, 252, HP_TYPE_STEEL);
+
+    /* Rhydon (Adamant) @ Sitrus Berry — Lightning Rod / Helping Hand doubles support */
+    AddBoxMonShiny(boxId, 1, SPECIES_RHYDON, 50, NATURE_ADAMANT, ITEM_SITRUS_BERRY,
+        MOVE_PROTECT, MOVE_ROCK_SLIDE, MOVE_EARTHQUAKE, MOVE_HELPING_HAND,
+        4, 252, 0, 0, 0, 252);
+
+    /* Heracross (Adamant) @ Choice Band — physical wallbreaker variant */
+    AddBoxMonShiny(boxId, 2, SPECIES_HERACROSS, 50, NATURE_ADAMANT, ITEM_CHOICE_BAND,
+        MOVE_MEGAHORN, MOVE_ROCK_SLIDE, MOVE_BRICK_BREAK, MOVE_FACADE,
+        4, 252, 0, 252, 0, 0);
+}

@@ -215,18 +215,19 @@ void NewGameInitData(void)
     // Skip the Scott intro cutscene at the Reception Gate
     VarSet(VAR_HAS_ENTERED_BATTLE_FRONTIER, 1);
 
-    // Give 999 of every non-key item. Items overflow into the PC when
-    // their pocket fills (bag Items pocket only holds 30 slots, but there
-    // are ~207 POCKET_ITEMS entries; PC absorbs the rest).
+    // Items: berries get 999 each (full stack), all other non-key items get 99
+    // (vanilla bag cap). When a pocket fills, overflow goes to the PC.
     {
         u16 itemId;
+        u16 qty;
         for (itemId = 1; itemId < ITEMS_COUNT; itemId++)
         {
             u8 pocket = GetItemPocket(itemId);
             if (pocket == POCKET_NONE || pocket == POCKET_KEY_ITEMS)
                 continue;
-            if (!AddBagItem(itemId, 999))
-                AddPCItem(itemId, 999);
+            qty = (pocket == POCKET_BERRIES) ? 999 : 99;
+            if (!AddBagItem(itemId, qty))
+                AddPCItem(itemId, qty);
         }
     }
 
