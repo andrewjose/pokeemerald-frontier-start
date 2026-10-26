@@ -776,6 +776,24 @@ static const struct MenuAction MultichoiceList_Exit[] =
     {gText_Exit},
 };
 
+static const struct MenuAction MultichoiceList_ArchetypeSelect[] =
+{
+    {gText_ArchetypeOffense},
+    {gText_ArchetypeStall},
+    {gText_ArchetypeBalanced},
+    {gText_ArchetypeSpeed},
+    {gText_ArchetypeTrickRoom},
+    {gText_ArchetypeRainDance},
+    {gText_ArchetypeSun},
+    {gText_ArchetypeSand},
+};
+
+static const struct MenuAction MultichoiceList_ArchetypeLevel[] =
+{
+    {gText_ArchetypeLv50},
+    {gText_ArchetypeLv100},
+};
+
 struct MultichoiceListStruct
 {
     const struct MenuAction *list;
@@ -898,6 +916,8 @@ static const struct MultichoiceListStruct sMultichoiceLists[] =
     [MULTI_SLATEPORT_TENT_RULES]       = MULTICHOICE(MultichoiceList_SlateportTentRules),
     [MULTI_FALLARBOR_TENT_RULES]       = MULTICHOICE(MultichoiceList_FallarborTentRules),
     [MULTI_TAG_MATCH_TYPE]             = MULTICHOICE(MultichoiceList_TagMatchType),
+    [MULTI_ARCHETYPE_SELECT]           = MULTICHOICE(MultichoiceList_ArchetypeSelect),
+    [MULTI_ARCHETYPE_LEVEL]            = MULTICHOICE(MultichoiceList_ArchetypeLevel),
 };
 
 const u8 *const gStdStrings[] =
