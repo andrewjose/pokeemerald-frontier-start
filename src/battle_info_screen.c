@@ -12,6 +12,9 @@
 // The battle is suspended exactly like it is for the in-battle Bag and party
 // menu: the battle graphics are torn down, and ReshowBattleScreenAfterMenu
 // rebuilds them on exit. Nothing in the battle state is modified.
+//
+// The same screen can also show arbitrary lists of Pokemon outside battle
+// (ShowMonListInfoScreen), used by the Battle Factory rental and swap screens.
 
 #include "global.h"
 #include "battle.h"
@@ -86,6 +89,14 @@ struct BattleInfoScreen
 {
     MainCallback exitCallback;
     u16 tilemap[BG_SCREEN_SIZE / 2];
+    bool8 inBattle;
+    u8 numSides;
+    struct Pokemon *parties[INFO_SIDE_COUNT];
+    u8 partySize[INFO_SIDE_COUNT];
+    const u8 *titles[INFO_SIDE_COUNT];
+    u16 colors[INFO_SIDE_COUNT];
+    u8 picks[INFO_SIDE_COUNT][PARTY_SIZE];
+    bool8 asHealed[INFO_SIDE_COUNT];
     u8 side;
     u8 count[INFO_SIDE_COUNT];
     u8 slots[INFO_SIDE_COUNT][PARTY_SIZE];
@@ -139,7 +150,8 @@ static void CB2_BattleInfo(void);
 static void VBlankCB_BattleInfo(void);
 static void Task_BattleInfoInput(u8 taskId);
 static void Task_BattleInfoExit(u8 taskId);
-static void BuildSideLists(void);
+static void BuildBattleSideLists(void);
+static void BuildListSideLists(u8 startSide, u8 startSlot);
 static void CreateSideIcons(void);
 static void DestroySideIcons(void);
 static void UpdateIconSelection(void);
@@ -224,6 +236,8 @@ static const u8 sText_Shiny[] = _("SHINY");
 static const u8 sText_Transformed[] = _("TRANSFORMED");
 static const u8 sText_EVTotal[] = _("EVs ");
 static const u8 sText_Controls[] = _("{L_BUTTON}{R_BUTTON} Side   {B_BUTTON} Back");
+static const u8 sText_ControlsOneSide[] = _("{B_BUTTON} Back");
+static const u8 sText_Picked[] = _("PICK ");
 
 static const u8 sText_StatHP[] = _("HP");
 static const u8 sText_StatAtk[] = _("ATK");
@@ -267,9 +281,9 @@ static const u8 sColor_Header[]     = {COLOR_TRANSPARENT, COLOR_WHITE, COLOR_DAR
 
 static EWRAM_DATA u8 sLEqualsAGraceFrames = 0;
 
-u8 BattleInfoScreen_CheckCombo(void)
+static u8 CheckCombo(bool8 enabled)
 {
-    if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED))
+    if (!enabled)
     {
         sLEqualsAGraceFrames = 0;
         return BATTLE_INFO_COMBO_NONE;
@@ -310,14 +324,26 @@ u8 BattleInfoScreen_CheckCombo(void)
     return BATTLE_INFO_COMBO_NONE;
 }
 
-void ShowBattleInfoScreen(MainCallback exitCallback)
+// For the battle action/move menus. Disabled in link battles and recorded-battle playback.
+u8 BattleInfoScreen_CheckCombo(void)
+{
+    return CheckCombo(!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED)));
+}
+
+// For menus outside battle (Battle Factory rental/swap screens).
+u8 InfoScreen_CheckComboOutsideBattle(void)
+{
+    return CheckCombo(TRUE);
+}
+
+static bool8 AllocInfoScreen(MainCallback exitCallback)
 {
     sInfo = AllocZeroed(sizeof(*sInfo));
     if (sInfo == NULL)
     {
-        // Not enough memory: go straight back to the battle.
+        // Not enough memory: go straight back.
         SetMainCallback2(exitCallback);
-        return;
+        return FALSE;
     }
 
     sInfo->exitCallback = exitCallback;
@@ -331,8 +357,59 @@ void ShowBattleInfoScreen(MainCallback exitCallback)
     sInfo->savedWin0v = GetGpuReg(REG_OFFSET_WIN0V);
     sInfo->savedWin1h = GetGpuReg(REG_OFFSET_WIN1H);
     sInfo->savedWin1v = GetGpuReg(REG_OFFSET_WIN1V);
+    return TRUE;
+}
 
-    BuildSideLists();
+void ShowBattleInfoScreen(MainCallback exitCallback)
+{
+    if (!AllocInfoScreen(exitCallback))
+        return;
+
+    sInfo->inBattle = TRUE;
+    sInfo->numSides = INFO_SIDE_COUNT;
+    sInfo->parties[INFO_SIDE_FOE] = gEnemyParty;
+    sInfo->parties[INFO_SIDE_PLAYER] = gPlayerParty;
+    sInfo->partySize[INFO_SIDE_FOE] = PARTY_SIZE;
+    sInfo->partySize[INFO_SIDE_PLAYER] = PARTY_SIZE;
+    sInfo->titles[INFO_SIDE_FOE] = sText_Foe;
+    sInfo->titles[INFO_SIDE_PLAYER] = sText_Player;
+    sInfo->colors[INFO_SIDE_FOE] = BG_COLOR_FOE;
+    sInfo->colors[INFO_SIDE_PLAYER] = BG_COLOR_PLAYER;
+    BuildBattleSideLists();
+
+    gMain.state = 0;
+    SetMainCallback2(CB2_BattleInfoSetup);
+}
+
+void ShowMonListInfoScreen(const struct InfoScreenSideArgs *sides, u8 numSides, u8 startSide, u8 startSlot, MainCallback exitCallback)
+{
+    u8 side, i;
+
+    if (!AllocInfoScreen(exitCallback))
+        return;
+
+    if (numSides > INFO_SIDE_COUNT)
+        numSides = INFO_SIDE_COUNT;
+    sInfo->inBattle = FALSE;
+    sInfo->numSides = numSides;
+    for (side = 0; side < numSides; side++)
+    {
+        sInfo->parties[side] = sides[side].party;
+        sInfo->partySize[side] = min(sides[side].count, PARTY_SIZE);
+        sInfo->titles[side] = sides[side].title;
+        sInfo->colors[side] = sides[side].color;
+        sInfo->asHealed[side] = sides[side].asHealed;
+        for (i = 0; i < PARTY_SIZE; i++)
+            sInfo->picks[side][i] = (sides[side].picks != NULL && i < sInfo->partySize[side]) ? sides[side].picks[i] : 0;
+    }
+    BuildListSideLists(startSide < numSides ? startSide : 0, startSlot);
+    if (sInfo->count[sInfo->side] == 0)
+    {
+        // Nothing to show
+        FREE_AND_SET_NULL(sInfo);
+        SetMainCallback2(exitCallback);
+        return;
+    }
 
     gMain.state = 0;
     SetMainCallback2(CB2_BattleInfoSetup);
@@ -443,7 +520,7 @@ static void Task_BattleInfoInput(u8 taskId)
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
         gTasks[taskId].func = Task_BattleInfoExit;
     }
-    else if (JOY_NEW(L_BUTTON | R_BUTTON | SELECT_BUTTON))
+    else if (JOY_NEW(L_BUTTON | R_BUTTON | SELECT_BUTTON) && sInfo->numSides > 1 && sInfo->count[side ^ 1] != 0)
     {
         PlaySE(SE_SELECT);
         sInfo->side ^= 1;
@@ -517,7 +594,7 @@ static void Task_BattleInfoExit(u8 taskId)
 
 static struct Pokemon *GetSideParty(u8 side)
 {
-    return (side == INFO_SIDE_FOE) ? gEnemyParty : gPlayerParty;
+    return sInfo->parties[side];
 }
 
 static u8 GetBattlerSideFor(u8 side)
@@ -529,6 +606,9 @@ static u8 GetBattlerSideFor(u8 side)
 static u8 GetActiveBattlerForSlot(u8 side, u8 partyIndex)
 {
     u8 battler;
+
+    if (!sInfo->inBattle)
+        return MAX_BATTLERS_COUNT;
 
     for (battler = 0; battler < gBattlersCount; battler++)
     {
@@ -542,26 +622,51 @@ static u8 GetActiveBattlerForSlot(u8 side, u8 partyIndex)
     return MAX_BATTLERS_COUNT;
 }
 
-static void BuildSideLists(void)
+static void BuildSideSlots(u8 side)
 {
-    u8 side, i, j;
+    struct Pokemon *party = GetSideParty(side);
+    u8 i;
+
+    sInfo->count[side] = 0;
+    sInfo->cursor[side] = 0;
+    if (party == NULL)
+        return;
+
+    for (i = 0; i < sInfo->partySize[side]; i++)
+    {
+        u16 species = GetMonData(&party[i], MON_DATA_SPECIES);
+        if (species == SPECIES_NONE || species >= NUM_SPECIES)
+            continue;
+        if (GetMonData(&party[i], MON_DATA_IS_EGG))
+            continue;
+        sInfo->slots[side][sInfo->count[side]++] = i;
+    }
+}
+
+static void SetCursorToSlot(u8 side, u8 partyIndex)
+{
+    u8 j;
+
+    for (j = 0; j < sInfo->count[side]; j++)
+    {
+        if (sInfo->slots[side][j] == partyIndex)
+        {
+            sInfo->cursor[side] = j;
+            return;
+        }
+    }
+}
+
+static void BuildBattleSideLists(void)
+{
+    u8 side;
 
     for (side = 0; side < INFO_SIDE_COUNT; side++)
     {
-        struct Pokemon *party = GetSideParty(side);
         u8 firstActive = 0xFF;
         u8 focusBattler;
 
-        sInfo->count[side] = 0;
-        for (i = 0; i < PARTY_SIZE; i++)
-        {
-            u16 species = GetMonData(&party[i], MON_DATA_SPECIES);
-            if (species == SPECIES_NONE || species >= NUM_SPECIES)
-                continue;
-            if (GetMonData(&party[i], MON_DATA_IS_EGG))
-                continue;
-            sInfo->slots[side][sInfo->count[side]++] = i;
-        }
+        BuildSideSlots(side);
 
         // Start each side on the Pokemon that's out: for the player that's the
         // one being given a command, for the foe it's the left-most one.
@@ -575,18 +680,25 @@ static void BuildSideLists(void)
         else if (side == INFO_SIDE_FOE && IsDoubleBattle())
             firstActive = gBattlerPartyIndexes[GetBattlerAtPosition(B_POSITION_OPPONENT_RIGHT)];
 
-        sInfo->cursor[side] = 0;
-        for (j = 0; j < sInfo->count[side]; j++)
-        {
-            if (sInfo->slots[side][j] == firstActive)
-            {
-                sInfo->cursor[side] = j;
-                break;
-            }
-        }
+        SetCursorToSlot(side, firstActive);
     }
 
     sInfo->side = INFO_SIDE_FOE;
+}
+
+static void BuildListSideLists(u8 startSide, u8 startSlot)
+{
+    u8 side;
+
+    for (side = 0; side < INFO_SIDE_COUNT; side++)
+    {
+        if (side < sInfo->numSides)
+            BuildSideSlots(side);
+        else
+            sInfo->count[side] = 0;
+    }
+    SetCursorToSlot(startSide, startSlot);
+    sInfo->side = startSide;
 }
 
 static u8 GetSelectedPartyIndex(void)
@@ -719,8 +831,7 @@ static void DrawHeader(void)
 
     FillWindowPixelBuffer(WIN_HEADER, PIXEL_FILL(COLOR_TRANSPARENT));
 
-    AddTextPrinterParameterized3(WIN_HEADER, FONT_NORMAL, 4, 1, sColor_Header, TEXT_SKIP_DRAW,
-                                 sInfo->side == INFO_SIDE_FOE ? sText_Foe : sText_Player);
+    AddTextPrinterParameterized3(WIN_HEADER, FONT_NORMAL, 4, 1, sColor_Header, TEXT_SKIP_DRAW, sInfo->titles[sInfo->side]);
 
     end = ConvertIntToDecimalStringN(buffer, sInfo->cursor[sInfo->side] + 1, STR_CONV_MODE_LEFT_ALIGN, 1);
     end = StringCopy(end, sText_Of);
@@ -732,7 +843,7 @@ static void DrawHeader(void)
 
     // Side-colored backdrop
     {
-        u16 color = (sInfo->side == INFO_SIDE_FOE) ? BG_COLOR_FOE : BG_COLOR_PLAYER;
+        u16 color = sInfo->colors[sInfo->side];
         LoadPalette(&color, BG_PLTT_ID(0), PLTT_SIZEOF(1));
     }
 }
@@ -933,6 +1044,9 @@ static void DrawRightPanel(const struct InfoPageData *data)
         const u8 *tag;
         const u8 *tagColor;
 
+        u8 pickBuffer[16];
+        u8 pick = sInfo->picks[sInfo->side][GetSelectedPartyIndex()];
+
         if (data->hp == 0)
         {
             tag = sText_Fainted;
@@ -943,13 +1057,27 @@ static void DrawRightPanel(const struct InfoPageData *data)
             tag = sText_InBattle;
             tagColor = sColor_Green;
         }
-        else
+        else if (sInfo->inBattle)
         {
             tag = sText_InParty;
             tagColor = sColor_Label;
         }
-        PrintText(WIN_RIGHT, x, y, tagColor, tag);
-        x += GetStringWidth(FONT_SMALL, tag, 0) + 6;
+        else if (pick != 0)
+        {
+            ConvertIntToDecimalStringN(StringCopy(pickBuffer, sText_Picked), pick, STR_CONV_MODE_LEFT_ALIGN, 1);
+            tag = pickBuffer;
+            tagColor = sColor_Green;
+        }
+        else
+        {
+            tag = NULL;
+            tagColor = sColor_Label;
+        }
+        if (tag != NULL)
+        {
+            PrintText(WIN_RIGHT, x, y, tagColor, tag);
+            x += GetStringWidth(FONT_SMALL, tag, 0) + 6;
+        }
 
         if (data->transformed)
         {
@@ -962,7 +1090,7 @@ static void DrawRightPanel(const struct InfoPageData *data)
 
     // Controls
     y += LINE_HEIGHT;
-    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sText_Controls);
+    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sInfo->numSides > 1 ? sText_Controls : sText_ControlsOneSide);
 
     PutWindowTilemap(WIN_RIGHT);
     CopyWindowToVram(WIN_RIGHT, COPYWIN_FULL);
@@ -1051,6 +1179,15 @@ static void GatherPageData(struct InfoPageData *data, u8 side, u8 partyIndex)
             data->pp[i] = GetMonData(mon, MON_DATA_PP1 + i);
             data->maxPp[i] = (data->moves[i] == MOVE_NONE) ? 0 : CalculatePPWithBonus(data->moves[i], ppBonuses, i);
         }
+    }
+
+    // Shown as it will be after the next heal (Factory swap candidates)
+    if (sInfo->asHealed[side])
+    {
+        data->hp = data->maxHp;
+        data->status = 0;
+        for (i = 0; i < MAX_MON_MOVES; i++)
+            data->pp[i] = data->maxPp[i];
     }
 
     // Hidden Power, same formula as Cmd_hiddenpowercalc

@@ -2,6 +2,7 @@
 #include "battle.h"
 #include "battle_factory_screen.h"
 #include "battle_factory.h"
+#include "battle_info_screen.h"
 #include "sprite.h"
 #include "event_data.h"
 #include "overworld.h"
@@ -156,6 +157,8 @@ struct FactorySwapScreen
     u8 faceSpeciesNameDelay;
     struct FactoryMonPic monPic;
     bool8 monPicAnimating;
+    bool8 fromInfoScreen;   // Returning from the L+R info screen
+    u8 infoReturnCursor;    // Cursor position to restore after the info screen
 };
 
 static void SpriteCB_Pokeball(struct Sprite *);
@@ -187,6 +190,7 @@ static void Select_Task_FadeSpeciesName(u8);
 static void Select_Task_OpenChosenMonPics(u8);
 static void Select_Task_HandleChooseMons(u8);
 static void Select_Task_HandleMenu(u8);
+static void Select_Task_OpenInfoScreen(u8);
 static void CreateFrontierFactorySelectableMons(u8);
 static void CreateSlateportTentSelectableMons(u8);
 static void Select_SetBallSpritePaletteNum(u8);
@@ -209,6 +213,9 @@ static void Swap_UpdateMenuCursorPosition(s8);
 static void Swap_ErasePopupMenu(u8);
 static void Swap_Task_ScreenInfoTransitionIn(u8);
 static void Swap_Task_HandleChooseMons(u8);
+static void Swap_Task_OpenInfoScreen(u8);
+static void Swap_HandleActionCursorChange(u8);
+static void Swap_RestoreAfterInfoScreen(void);
 static void Swap_Task_ScreenInfoTransitionOut(u8);
 static void Swap_PrintOnInfoWindow(const u8 *);
 static void Swap_ShowMenuOptions(void);
@@ -257,6 +264,14 @@ static TaskFunc sSwap_CurrentOptionFunc;
 static struct FactorySwapScreen *sFactorySwapScreen;
 
 COMMON_DATA u8 (*gFactorySelect_CurrentOptionFunc)(void) = NULL;
+
+// L+R info screen
+static const u8 sInfoText_Rentals[] = _("RENTALS");
+static const u8 sInfoText_Theirs[] = _("FOE'S");
+static const u8 sInfoText_Yours[] = _("YOURS");
+#define INFO_COLOR_RENTALS RGB(4, 13, 11)
+#define INFO_COLOR_THEIRS  RGB(19, 6, 7)
+#define INFO_COLOR_YOURS   RGB(5, 9, 19)
 
 static const u16 sPokeballGray_Pal[]         = INCGFX_U16("graphics/battle_frontier/factory_screen/pokeball_gray.pal", ".gbapal");
 static const u16 sPokeballSelected_Pal[]     = INCGFX_U16("graphics/battle_frontier/factory_screen/pokeball_selected.pal", ".gbapal");
@@ -1492,6 +1507,62 @@ static void Select_Task_OpenSummaryScreen(u8 taskId)
     }
 }
 
+// Tear down the select screen and show the info screen for all rentals.
+// On return CB2_InitSelectScreen rebuilds the screen from sFactorySelectScreen
+// (cursor and picks are kept) and resumes in Select_Task_HandleChooseMons.
+static void Select_Task_OpenInfoScreen(u8 taskId)
+{
+    u8 i;
+
+    switch (gTasks[taskId].tState)
+    {
+    case 0:
+        BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+        gTasks[taskId].tState++;
+        break;
+    case 1:
+        if (!gPaletteFade.active)
+        {
+            DestroyTask(sFactorySelectScreen->fadeSpeciesNameTaskId);
+            Select_DestroyAllSprites();
+            FREE_AND_SET_NULL(sSelectMenuTilesetBuffer);
+            FREE_AND_SET_NULL(sSelectMonPicBgTilesetBuffer);
+            FREE_AND_SET_NULL(sSelectMenuTilemapBuffer);
+            FREE_AND_SET_NULL(sSelectMonPicBgTilemapBuffer);
+            FreeAllWindowBuffers();
+            gTasks[taskId].tState++;
+        }
+        break;
+    case 2:
+    {
+        struct InfoScreenSideArgs side;
+        u8 picks[SELECTABLE_MONS_COUNT];
+
+        DestroyTask(taskId);
+        // Freed by CB2_InitSelectScreen when the select screen comes back
+        sFactorySelectMons = AllocZeroed(sizeof(struct Pokemon) * SELECTABLE_MONS_COUNT);
+        if (sFactorySelectMons == NULL)
+        {
+            SetMainCallback2(CB2_InitSelectScreen);
+            break;
+        }
+        for (i = 0; i < SELECTABLE_MONS_COUNT; i++)
+        {
+            sFactorySelectMons[i] = sFactorySelectScreen->mons[i].monData;
+            picks[i] = sFactorySelectScreen->mons[i].selectedId;
+        }
+        side.party = sFactorySelectMons;
+        side.count = SELECTABLE_MONS_COUNT;
+        side.title = sInfoText_Rentals;
+        side.color = INFO_COLOR_RENTALS;
+        side.picks = picks;
+        side.asHealed = FALSE;
+        ShowMonListInfoScreen(&side, 1, 0, sFactorySelectScreen->cursorPos, CB2_InitSelectScreen);
+        break;
+    }
+    }
+}
+
 static void Select_Task_Exit(u8 taskId)
 {
     if (sFactorySelectScreen->monPicAnimating == TRUE)
@@ -1683,6 +1754,19 @@ static void Select_Task_HandleChooseMons(u8 taskId)
         }
         break;
     case STATE_CHOOSE_MONS_HANDLE_INPUT:
+        // L+R: show IVs/EVs/moves for all the rentals
+        switch (InfoScreen_CheckComboOutsideBattle())
+        {
+        case BATTLE_INFO_COMBO_OPEN:
+            PlaySE(SE_SELECT);
+            sFactorySelectScreen->fadeSpeciesNameActive = FALSE;
+            gTasks[taskId].tState = 0;
+            gTasks[taskId].func = Select_Task_OpenInfoScreen;
+            return;
+        case BATTLE_INFO_COMBO_WAIT:
+            return;
+        }
+
         if (JOY_NEW(A_BUTTON))
         {
             PlaySE(SE_SELECT);
@@ -2406,6 +2490,92 @@ static void Swap_Task_OpenSummaryScreen(u8 taskId)
     }
 }
 
+// Tear down the swap screen and show the info screen: the opponent's Pokémon
+// (available to swap in) and the player's. On return CB2_InitSwapScreen
+// rebuilds the same sub-screen (yours or theirs) with the same cursor.
+static void Swap_Task_OpenInfoScreen(u8 taskId)
+{
+    switch (gTasks[taskId].tState)
+    {
+    case 0:
+        BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+        gTasks[taskId].tState++;
+        break;
+    case 1:
+        if (!gPaletteFade.active)
+        {
+            DestroyTask(sFactorySwapScreen->fadeSpeciesNameTaskId);
+            Swap_DestroyAllSprites();
+            FREE_AND_SET_NULL(sSwapMenuTilesetBuffer);
+            FREE_AND_SET_NULL(sSwapMonPicBgTilesetBuffer);
+            FREE_AND_SET_NULL(sSwapMenuTilemapBuffer);
+            FREE_AND_SET_NULL(sSwapMonPicBgTilemapBuffer);
+            FreeAllWindowBuffers();
+            gTasks[taskId].tState++;
+        }
+        break;
+    case 2:
+    {
+        struct InfoScreenSideArgs sides[2];
+        u8 cursor = sFactorySwapScreen->cursorPos;
+
+        DestroyTask(taskId);
+        sFactorySwapScreen->fromInfoScreen = TRUE;
+        sFactorySwapScreen->infoReturnCursor = cursor;
+        // Swap_InitAllSprites places the arrow over ballSpriteIds[cursorPos],
+        // so it must be a ball while rebuilding; the real cursor is restored after.
+        if (sFactorySwapScreen->cursorPos >= FRONTIER_PARTY_SIZE)
+            sFactorySwapScreen->cursorPos = 0;
+
+        sides[0].party = gEnemyParty;
+        sides[0].count = FRONTIER_PARTY_SIZE;
+        sides[0].title = sInfoText_Theirs;
+        sides[0].color = INFO_COLOR_THEIRS;
+        sides[0].picks = NULL;
+        sides[0].asHealed = TRUE; // they're healed before the next battle, like the rest of your party
+        sides[1].party = gPlayerParty;
+        sides[1].count = FRONTIER_PARTY_SIZE;
+        sides[1].title = sInfoText_Yours;
+        sides[1].color = INFO_COLOR_YOURS;
+        sides[1].picks = NULL;
+        sides[1].asHealed = FALSE;
+        ShowMonListInfoScreen(sides, 2,
+                              sFactorySwapScreen->inEnemyScreen ? 0 : 1,
+                              cursor < FRONTIER_PARTY_SIZE ? cursor : 0,
+                              CB2_InitSwapScreen);
+        break;
+    }
+    }
+}
+
+// Puts the swap screen back in the state it was in when the info screen
+// was opened: same sub-screen (yours / theirs), same cursor, same buttons.
+static void Swap_RestoreAfterInfoScreen(void)
+{
+    u8 i;
+
+    if (sFactorySwapScreen->inEnemyScreen)
+    {
+        Swap_InitActions(SWAP_ENEMY_SCREEN);
+        // "Pkmn for Swap" button is only on the enemy screen; put it where
+        // Swap_Task_SlideButtonOnOffScreen leaves it after sliding on.
+        for (i = 0; i < ARRAY_COUNT(sFactorySwapScreen->pkmnForSwapButtonSpriteIds); i++)
+        {
+            gSprites[sFactorySwapScreen->pkmnForSwapButtonSpriteIds[i][0]].x = 160;
+            gSprites[sFactorySwapScreen->pkmnForSwapButtonSpriteIds[i][1]].x = 160 + 16;
+            gSprites[sFactorySwapScreen->pkmnForSwapButtonSpriteIds[i][2]].x = 160 + 48;
+        }
+    }
+    else
+    {
+        Swap_InitActions(SWAP_PLAYER_SCREEN);
+    }
+    sFactorySwapScreen->cursorPos = sFactorySwapScreen->infoReturnCursor;
+    if (sFactorySwapScreen->cursorPos >= sFactorySwapScreen->actionsCount)
+        sFactorySwapScreen->cursorPos = 0;
+    Swap_HandleActionCursorChange(sFactorySwapScreen->cursorPos);
+}
+
 static void Swap_Task_Exit(u8 taskId)
 {
     if (sFactorySwapScreen->monPicAnimating == TRUE)
@@ -2643,6 +2813,19 @@ static void Swap_Task_HandleChooseMons(u8 taskId)
         }
         break;
     case STATE_CHOOSE_MONS_HANDLE_INPUT:
+        // L+R: show IVs/EVs/moves for the Pokémon on offer and your own
+        switch (InfoScreen_CheckComboOutsideBattle())
+        {
+        case BATTLE_INFO_COMBO_OPEN:
+            PlaySE(SE_SELECT);
+            sFactorySwapScreen->fadeSpeciesNameActive = FALSE;
+            gTasks[taskId].tState = 0;
+            gTasks[taskId].func = Swap_Task_OpenInfoScreen;
+            return;
+        case BATTLE_INFO_COMBO_WAIT:
+            return;
+        }
+
         if (JOY_NEW(A_BUTTON))
         {
             // Run whatever action is currently selected (a Poké Ball, the Cancel button, etc.)
@@ -3358,11 +3541,17 @@ static void CB2_InitSwapScreen(void)
         Swap_InitAllSprites();
         if (sFactorySwapScreen->fromSummaryScreen == TRUE)
             Swap_ShowSummaryMonSprite();
-        Swap_InitActions(SWAP_PLAYER_SCREEN);
+        if (sFactorySwapScreen->fromInfoScreen == TRUE)
+            Swap_RestoreAfterInfoScreen();
+        else
+            Swap_InitActions(SWAP_PLAYER_SCREEN);
         gMain.state++;
         break;
     case 7:
-        Swap_PrintOnInfoWindow(gText_SelectPkmnToSwap);
+        if (sFactorySwapScreen->fromInfoScreen == TRUE && sFactorySwapScreen->inEnemyScreen)
+            Swap_PrintOnInfoWindow(gText_SelectPkmnToAccept);
+        else
+            Swap_PrintOnInfoWindow(gText_SelectPkmnToSwap);
         PutWindowTilemap(SWAP_WIN_INFO);
         gMain.state++;
         break;
@@ -3429,6 +3618,7 @@ static void CB2_InitSwapScreen(void)
             taskId = CreateTask(Swap_Task_HandleMenu, 0);
             gTasks[taskId].tState = STATE_MENU_INIT;
         }
+        sFactorySwapScreen->fromInfoScreen = FALSE;
         SetMainCallback2(Swap_CB2);
         break;
     }
