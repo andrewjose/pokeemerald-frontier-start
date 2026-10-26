@@ -245,14 +245,10 @@ BattleFrontier_Lounge7_EventScript_ConfirmMoveSelection::
 	copyvar VAR_0x8004, VAR_TEMP_FRONTIER_TUTOR_SELECTION
 	copyvar VAR_0x8005, VAR_TEMP_FRONTIER_TUTOR_ID
 	special BufferBattleFrontierTutorMoveName
-	buffernumberstring STR_VAR_2, VAR_0x8008
 	copyvar VAR_0x8004, VAR_TEMP_C
-	msgbox BattleFrontier_Lounge7_Text_MoveWillBeXBattlePoints, MSGBOX_YESNO
+	msgbox BattleFrontier_Lounge7_Text_TeachMoveFree, MSGBOX_YESNO
 	goto_if_eq VAR_RESULT, NO, BattleFrontier_Lounge7_EventScript_ChooseNewMove
-	specialvar VAR_TEMP_1, GetFrontierBattlePoints
-	goto_if_ge VAR_TEMP_1, VAR_0x8008, BattleFrontier_Lounge7_EventScript_TeachTutorMove
-	msgbox BattleFrontier_Lounge7_Text_HaventGotEnoughPoints, MSGBOX_DEFAULT
-	goto BattleFrontier_Lounge7_EventScript_ChooseNewMove
+	goto BattleFrontier_Lounge7_EventScript_TeachTutorMove
 	end
 
 BattleFrontier_Lounge7_EventScript_TeachTutorMove::
@@ -263,9 +259,6 @@ BattleFrontier_Lounge7_EventScript_TeachTutorMove::
 	special CloseBattleFrontierTutorWindow
 	special ChooseMonForMoveTutor
 	goto_if_eq VAR_RESULT, FALSE, BattleFrontier_Lounge7_EventScript_CancelChooseMon
-	msgbox BattleFrontier_Lounge7_Text_IllTakeBattlePoints, MSGBOX_DEFAULT
-	copyvar VAR_0x8004, VAR_0x8008
-	special TakeFrontierBattlePoints
 	release
 	end
 
@@ -309,9 +302,9 @@ BattleFrontier_Lounge7_Text_TeachWhichMove:
 	.string "Fine, fine, look here!\n"
 	.string "Which move should I teach?$"
 
-BattleFrontier_Lounge7_Text_MoveWillBeXBattlePoints:
+BattleFrontier_Lounge7_Text_TeachMoveFree:
 	.string "The move {STR_VAR_1}, is it?\n"
-	.string "That will be {STR_VAR_2} Battle Points, okay?$"
+	.string "Sure, I'll teach it for free!$"
 
 BattleFrontier_Lounge7_Text_TeachMoveToWhichMon:
 	.string "Fine, fine, now pick the POKéMON\n"
@@ -472,3 +465,162 @@ BattleFrontier_Lounge7_Text_FirePunchDesc::
 	.string "A fiery punch\n"
 	.string "that may burn\n"
 	.string "the foe.$"
+
+@ ========================================================================
+@ Move Relearner (free, no heart scale required)
+@ ========================================================================
+BattleFrontier_Lounge7_EventScript_MoveRelearner::
+	lock
+	faceplayer
+	msgbox BattleFrontier_Lounge7_Text_RelearnerIntro, MSGBOX_DEFAULT
+	goto BattleFrontier_Lounge7_EventScript_RelearnerChooseMon
+	end
+
+BattleFrontier_Lounge7_EventScript_RelearnerChooseMon::
+	msgbox BattleFrontier_Lounge7_Text_RelearnerChooseMon, MSGBOX_DEFAULT
+	special ChooseMonForMoveRelearner
+	goto_if_eq VAR_0x8004, PARTY_NOTHING_CHOSEN, BattleFrontier_Lounge7_EventScript_RelearnerComeBack
+	special IsSelectedMonEgg
+	goto_if_eq VAR_RESULT, TRUE, BattleFrontier_Lounge7_EventScript_RelearnerCantTeachEgg
+	goto_if_eq VAR_0x8005, 0, BattleFrontier_Lounge7_EventScript_RelearnerNoMove
+	goto BattleFrontier_Lounge7_EventScript_RelearnerChooseMove
+	end
+
+BattleFrontier_Lounge7_EventScript_RelearnerChooseMove::
+	msgbox BattleFrontier_Lounge7_Text_RelearnerTeachWhichMove, MSGBOX_DEFAULT
+	special TeachMoveRelearnerMove
+	goto_if_eq VAR_0x8004, 0, BattleFrontier_Lounge7_EventScript_RelearnerChooseMon
+	goto BattleFrontier_Lounge7_EventScript_RelearnerChooseMon
+	end
+
+BattleFrontier_Lounge7_EventScript_RelearnerNoMove::
+	msgbox BattleFrontier_Lounge7_Text_RelearnerNoMove, MSGBOX_DEFAULT
+	goto BattleFrontier_Lounge7_EventScript_RelearnerChooseMon
+	end
+
+BattleFrontier_Lounge7_EventScript_RelearnerCantTeachEgg::
+	msgbox BattleFrontier_Lounge7_Text_RelearnerCantTeachEgg, MSGBOX_DEFAULT
+	goto BattleFrontier_Lounge7_EventScript_RelearnerChooseMon
+	end
+
+BattleFrontier_Lounge7_EventScript_RelearnerComeBack::
+	release
+	end
+
+BattleFrontier_Lounge7_Text_RelearnerIntro:
+	.string "I'm the MOVE RELEARNER.\p"
+	.string "I can teach your POKéMON any move\n"
+	.string "it has learned before - free of charge!$"
+
+BattleFrontier_Lounge7_Text_RelearnerChooseMon:
+	.string "Which POKéMON needs a reminder?$"
+
+BattleFrontier_Lounge7_Text_RelearnerTeachWhichMove:
+	.string "Which move should I teach?$"
+
+BattleFrontier_Lounge7_Text_RelearnerNoMove:
+	.string "Hmm…\p"
+	.string "I don't have any move I can\n"
+	.string "teach that POKéMON.$"
+
+BattleFrontier_Lounge7_Text_RelearnerCantTeachEgg:
+	.string "Hunh? There isn't a single move I\n"
+	.string "can teach an EGG.$"
+
+@ ========================================================================
+@ Move Deleter (free in vanilla Emerald, just relocated)
+@ ========================================================================
+BattleFrontier_Lounge7_EventScript_MoveDeleter::
+	lock
+	faceplayer
+	msgbox BattleFrontier_Lounge7_Text_DeleterIntro, MSGBOX_YESNO
+	switch VAR_RESULT
+	case YES, BattleFrontier_Lounge7_EventScript_DeleterChooseMonAndMove
+	case NO, BattleFrontier_Lounge7_EventScript_DeleterComeAgain
+	release
+	end
+
+BattleFrontier_Lounge7_EventScript_DeleterChooseMonAndMove::
+	msgbox BattleFrontier_Lounge7_Text_DeleterWhichMon, MSGBOX_DEFAULT
+	special ChoosePartyMon
+	goto_if_eq VAR_0x8004, PARTY_NOTHING_CHOSEN, BattleFrontier_Lounge7_EventScript_DeleterComeAgain
+	special IsSelectedMonEgg
+	goto_if_eq VAR_RESULT, TRUE, BattleFrontier_Lounge7_EventScript_DeleterEggCantForget
+	special GetNumMovesSelectedMonHas
+	goto_if_eq VAR_RESULT, 1, BattleFrontier_Lounge7_EventScript_DeleterOnlyKnowsOneMove
+	msgbox BattleFrontier_Lounge7_Text_DeleterWhichMove, MSGBOX_DEFAULT
+	fadescreen FADE_TO_BLACK
+	special MoveDeleterChooseMoveToForget
+	fadescreen FADE_FROM_BLACK
+	goto_if_eq VAR_0x8005, MAX_MON_MOVES, BattleFrontier_Lounge7_EventScript_DeleterChooseMonAndMove
+	special BufferMoveDeleterNicknameAndMove
+	msgbox BattleFrontier_Lounge7_Text_DeleterConfirm, MSGBOX_YESNO
+	switch VAR_RESULT
+	case YES, BattleFrontier_Lounge7_EventScript_DeleterTryForget
+	case NO, BattleFrontier_Lounge7_EventScript_DeleterComeAgain
+	release
+	end
+
+BattleFrontier_Lounge7_EventScript_DeleterTryForget::
+	special IsLastMonThatKnowsSurf
+	goto_if_eq VAR_RESULT, TRUE, BattleFrontier_Lounge7_EventScript_DeleterLastSurf
+	special MoveDeleterForgetMove
+	playfanfare MUS_MOVE_DELETED
+	waitfanfare
+	msgbox BattleFrontier_Lounge7_Text_DeleterForgotten, MSGBOX_DEFAULT
+	release
+	end
+
+BattleFrontier_Lounge7_EventScript_DeleterOnlyKnowsOneMove::
+	special BufferMoveDeleterNicknameAndMove
+	msgbox BattleFrontier_Lounge7_Text_DeleterOnlyOne, MSGBOX_DEFAULT
+	release
+	end
+
+BattleFrontier_Lounge7_EventScript_DeleterEggCantForget::
+	msgbox BattleFrontier_Lounge7_Text_DeleterEggCantForget, MSGBOX_DEFAULT
+	release
+	end
+
+BattleFrontier_Lounge7_EventScript_DeleterLastSurf::
+	msgbox BattleFrontier_Lounge7_Text_DeleterLastSurf, MSGBOX_DEFAULT
+	release
+	end
+
+BattleFrontier_Lounge7_EventScript_DeleterComeAgain:
+	msgbox BattleFrontier_Lounge7_Text_DeleterComeAgain, MSGBOX_DEFAULT
+	release
+	end
+
+BattleFrontier_Lounge7_Text_DeleterIntro:
+	.string "I'm the MOVE DELETER.\p"
+	.string "I can make a POKéMON forget a move.\n"
+	.string "Would you like me to do that?$"
+
+BattleFrontier_Lounge7_Text_DeleterWhichMon:
+	.string "Which POKéMON should forget a move?$"
+
+BattleFrontier_Lounge7_Text_DeleterWhichMove:
+	.string "Which move should be forgotten?$"
+
+BattleFrontier_Lounge7_Text_DeleterConfirm:
+	.string "{STR_VAR_1} should forget {STR_VAR_2}?$"
+
+BattleFrontier_Lounge7_Text_DeleterForgotten:
+	.string "{STR_VAR_1} forgot {STR_VAR_2}.$"
+
+BattleFrontier_Lounge7_Text_DeleterOnlyOne:
+	.string "{STR_VAR_1} knows only one move.\n"
+	.string "It can't forget its only move.$"
+
+BattleFrontier_Lounge7_Text_DeleterEggCantForget:
+	.string "An EGG can't forget a move.$"
+
+BattleFrontier_Lounge7_Text_DeleterLastSurf:
+	.string "That's the only POKéMON you have\n"
+	.string "that can use SURF.\p"
+	.string "It can't forget that move.$"
+
+BattleFrontier_Lounge7_Text_DeleterComeAgain:
+	.string "Oh, is that so?\n"
+	.string "Do come again.$"
