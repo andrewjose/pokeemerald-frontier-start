@@ -215,20 +215,43 @@ void NewGameInitData(void)
     // Skip the Scott intro cutscene at the Reception Gate
     VarSet(VAR_HAS_ENTERED_BATTLE_FRONTIER, 1);
 
-    // Items: berries get 999 each (full stack), all other non-key items get 99
-    // (vanilla bag cap). When a pocket fills, overflow goes to the PC.
+    // Curated starting items (Battle Frontier Start Mod, v1.25):
+    //   - 900 of every berry
+    //   - 99 of each TM (TM01..TM50)
+    //   - 99 Master Balls
+    //   - 99 Max Repels (Repel and Super Repel are NOT given)
+    //   - 99 Rare Candy
+    //   - 99 of each vitamin (HP Up, Protein, Iron, Carbos, Calcium, Zinc)
+    // Everything else: nothing. PC overflow only kicks in for berries (the only
+    // pocket that risks filling at 900-each).
     {
         u16 itemId;
         u16 qty;
+        // Berries: 900 each
         for (itemId = 1; itemId < ITEMS_COUNT; itemId++)
         {
-            u8 pocket = GetItemPocket(itemId);
-            if (pocket == POCKET_NONE || pocket == POCKET_KEY_ITEMS)
+            if (GetItemPocket(itemId) != POCKET_BERRIES)
                 continue;
-            qty = (pocket == POCKET_BERRIES) ? 999 : 99;
+            qty = 900;
             if (!AddBagItem(itemId, qty))
                 AddPCItem(itemId, qty);
         }
+        // TMs: 99 each (TM01..TM50). HMs are skipped.
+        for (itemId = ITEM_TM01; itemId <= ITEM_TM50; itemId++)
+        {
+            if (!AddBagItem(itemId, 99))
+                AddPCItem(itemId, 99);
+        }
+        // Specific items: 99 of each
+        AddBagItem(ITEM_MASTER_BALL, 99);
+        AddBagItem(ITEM_MAX_REPEL,   99);
+        AddBagItem(ITEM_RARE_CANDY,  99);
+        AddBagItem(ITEM_HP_UP,       99);
+        AddBagItem(ITEM_PROTEIN,     99);
+        AddBagItem(ITEM_IRON,        99);
+        AddBagItem(ITEM_CARBOS,      99);
+        AddBagItem(ITEM_CALCIUM,     99);
+        AddBagItem(ITEM_ZINC,        99);
     }
 
     // Re-apply options here at the end of init so nothing in the chain overwrites them.
