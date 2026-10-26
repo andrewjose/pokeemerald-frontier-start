@@ -1,34 +1,32 @@
 @ ===========================================================================
 @ data/scripts/ArchetypeSelect.inc
-@ After naming: player picks archetype and level, receives party + PC boxes.
+@ After naming: player picks archetype, receives L50 starting party + filled boxes.
 @ gSpecialVar_0x8004 = archetype index (0-7)
-@ gSpecialVar_0x8005 = level (50 or 100)
+@ gSpecialVar_0x8005 = level (always 50 for the spawn party)
+@
+@ Boxes contain BOTH levels for v13 archetypes (slots 0-5 L50, 6-11 L100) and
+@ all four Tower boxes regardless of choice.
 @ ===========================================================================
 
 ArchetypeSelect_Script::
 	lockall
 	msgbox ArchetypeSelect_Text_Intro, MSGBOX_DEFAULT
 
-@ --- Step 1: Choose archetype ---
+@ --- Choose archetype ---
 ArchetypeSelect_ChooseArchetype::
 	multichoice 0, 0, MULTI_ARCHETYPE_SELECT, FALSE
 	goto_if_eq VAR_RESULT, MULTI_B_PRESSED, ArchetypeSelect_ChooseArchetype
 	copyvar VAR_0x8004, VAR_RESULT
 
-@ --- Step 2: Choose level (B returns to archetype select) ---
-ArchetypeSelect_ChooseLevel::
-	multichoice 0, 0, MULTI_ARCHETYPE_LEVEL, FALSE
-	goto_if_eq VAR_RESULT, MULTI_B_PRESSED, ArchetypeSelect_ChooseArchetype
-	@ VAR_RESULT: 0 = Lv.50, 1 = Lv.100
-	goto_if_eq VAR_RESULT, 0, ArchetypeSelect_SetLevel50
-	setvar VAR_0x8005, 100
-	goto ArchetypeSelect_GiveTeam
-
-ArchetypeSelect_SetLevel50::
+@ --- Always L50 spawn party ---
 	setvar VAR_0x8005, 50
 
-ArchetypeSelect_GiveTeam::
+@ --- Display "please wait", run the heavy special, then close ---
+	message ArchetypeSelect_Text_PleaseWait
+	waitmessage
 	special GivePresetPartyAndFillBoxes
+	closemessage
+
 	msgbox ArchetypeSelect_Text_Confirm, MSGBOX_DEFAULT
 	releaseall
 	end
@@ -36,6 +34,10 @@ ArchetypeSelect_GiveTeam::
 ArchetypeSelect_Text_Intro:
 	.string "Welcome to the Battle Frontier!\p"
 	.string "Choose your fighting style.$"
+
+ArchetypeSelect_Text_PleaseWait:
+	.string "Generating POKéMON…\n"
+	.string "This can take a moment.$"
 
 ArchetypeSelect_Text_Confirm:
 	.string "Your team is ready.\p"
