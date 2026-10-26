@@ -778,9 +778,9 @@ static const struct MenuAction MultichoiceList_Exit[] =
 
 static const struct MenuAction MultichoiceList_ArchetypeSelect[] =
 {
+    {gText_ArchetypeRecommended},
     {gText_ArchetypeOffense},
     {gText_ArchetypeStall},
-    {gText_ArchetypeBalanced},
     {gText_ArchetypeSpeed},
     {gText_ArchetypeTrickRoom},
     {gText_ArchetypeRainDance},

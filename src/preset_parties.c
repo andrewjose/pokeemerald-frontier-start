@@ -19,8 +19,9 @@
 #define ARCHETYPE_SAND           7
 #define ARCHETYPE_TOWER_FIGHTERS 8
 #define ARCHETYPE_TOWER_SAMPLES  9
+#define ARCHETYPE_RECOMMENDED    10
 #define NUM_ARCHETYPES_BASE      8     /* archetypes that have per-level box pairs */
-#define NUM_ARCHETYPES           10    /* total archetype menu entries */
+#define NUM_ARCHETYPES           11    /* total archetype IDs (menu remaps) */
 #define PRESET_PARTY_SIZE        6
 
 /* Box layout:
@@ -742,14 +743,63 @@ static void FillPartyFromBox(u8 boxId);
    Boxes are always filled the same way regardless of archetype choice.
    What changes is the player's PARTY.
    ------------------------------------------------------------------------- */
+/* Maps the menu index (0-7) the script passes via VAR_0x8004 to an actual
+   archetype ID. The menu is reordered: position 0 is "Recommended" (uses the
+   tower fighters box for source mons), Balanced is removed from the menu but
+   its box is still filled.
+   Menu order: Recommended, Offense, Stall, Speed, TrickRoom, Rain, Sun, Sand */
+static const u8 sMenuToArchetype[] = {
+    ARCHETYPE_RECOMMENDED,  /* 0 */
+    ARCHETYPE_OFFENSE,      /* 1 */
+    ARCHETYPE_STALL,        /* 2 */
+    ARCHETYPE_SPEED,        /* 3 */
+    ARCHETYPE_TRICKROOM,    /* 4 */
+    ARCHETYPE_RAIN,         /* 5 */
+    ARCHETYPE_SUN,          /* 6 */
+    ARCHETYPE_SAND,         /* 7 */
+};
+#define MENU_ENTRY_COUNT  (sizeof(sMenuToArchetype) / sizeof(sMenuToArchetype[0]))
+
+/* Builds the "Recommended" starting party from the Tower fighters L50 box.
+   Per user spec: Latios Timid, Metagross Adamant, Swampert Brave, Salamence
+   Adamant, Snorlax Careful, Suicune Bold. These all live in box 10 already
+   at known slots, so just copy them into the party. */
+static void FillPartyRecommended(void)
+{
+    /* Slot indices in BOX_TOWER_FIGHTERS_L50 (box 10). Cross-reference the
+       FillTowerFightersBox listing in this file. */
+    static const u8 sRecommendedSlots[PARTY_SIZE] = {
+         0,   /* Latios Timid          */
+         2,   /* Metagross Adamant     */
+         7,   /* Swampert Brave        */
+         5,   /* Salamence Adamant     */
+        10,   /* Snorlax Careful       */
+        18,   /* Suicune Bold          */
+    };
+    u8 partySlot;
+    ZeroPlayerPartyMons();
+    for (partySlot = 0; partySlot < PARTY_SIZE; partySlot++)
+    {
+        struct BoxPokemon *src = GetBoxedMonPtr(BOX_TOWER_FIGHTERS_L50,
+                                                sRecommendedSlots[partySlot]);
+        BoxMonToMon(src, &gPlayerParty[partySlot]);
+        CalculateMonStats(&gPlayerParty[partySlot]);
+    }
+    gPlayerPartyCount = PARTY_SIZE;
+}
+
 void GivePresetPartyAndFillBoxes(void)
 {
-    u8 archetype = (u8)gSpecialVar_0x8004;
+    u8 menuIndex = (u8)gSpecialVar_0x8004;
     u8 level     = (gSpecialVar_0x8005 == 100) ? 100 : 50;
+    u8 archetype;
     u8 i;
 
-    if (archetype >= NUM_ARCHETYPES)
-        archetype = 0;
+    /* Remap menu index → archetype ID. Out-of-range menu indices fall back
+       to entry 0 (Recommended). */
+    if (menuIndex >= MENU_ENTRY_COUNT)
+        menuIndex = 0;
+    archetype = sMenuToArchetype[menuIndex];
 
     /* Fill all 8 base archetype boxes: lv50 in slots 0-5, lv100 in slots 6-11 */
     for (i = 0; i < NUM_ARCHETYPES_BASE; i++)
@@ -773,6 +823,10 @@ void GivePresetPartyAndFillBoxes(void)
     if (archetype < NUM_ARCHETYPES_BASE)
     {
         sFillers[archetype](level, 0xFF, 0);
+    }
+    else if (archetype == ARCHETYPE_RECOMMENDED)
+    {
+        FillPartyRecommended();
     }
     else if (archetype == ARCHETYPE_TOWER_FIGHTERS)
     {
