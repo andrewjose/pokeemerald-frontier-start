@@ -760,27 +760,33 @@ static const u8 sMenuToArchetype[] = {
 };
 #define MENU_ENTRY_COUNT  (sizeof(sMenuToArchetype) / sizeof(sMenuToArchetype[0]))
 
-/* Builds the "Recommended" starting party from the Tower fighters L50 box.
-   Per user spec: Latios Timid, Metagross Adamant, Swampert Brave, Salamence
-   Adamant, Snorlax Careful, Suicune Bold. These all live in box 10 already
-   at known slots, so just copy them into the party. */
+/* Builds the "Recommended" starting party from the Tower SAMPLE TEAMS box.
+   Per user spec: Latios Timid, Metagross Adamant (Team Blue, Choice Band),
+   Swampert Brave, Salamence Adamant, Snorlax Careful, Suicune Bold. These
+   sets carry the explicit EV spreads from the "Conquer the Tower" guide.
+   In box 12 (BOX_TOWER_SAMPLES), L50 mons live in slots 0-9. */
 static void FillPartyRecommended(void)
 {
-    /* Slot indices in BOX_TOWER_FIGHTERS_L50 (box 10). Cross-reference the
-       FillTowerFightersBox listing in this file. */
+    /* Slot indices in BOX_TOWER_SAMPLES (box 12), L50 half (slots 0-9):
+       0 = Latios Timid (Team Blue)
+       1 = Metagross Adamant + Choice Band (Team Blue)
+       2 = Swampert Brave (Team Blue)
+       7 = Salamence Adamant (Team Steamroller)
+       8 = Snorlax Careful (Team Steamroller)
+       9 = Suicune Bold (Team Steamroller) */
     static const u8 sRecommendedSlots[PARTY_SIZE] = {
-         0,   /* Latios Timid          */
-         2,   /* Metagross Adamant     */
-         7,   /* Swampert Brave        */
-         5,   /* Salamence Adamant     */
-        10,   /* Snorlax Careful       */
-        18,   /* Suicune Bold          */
+        0,   /* Latios Timid          */
+        1,   /* Metagross Adamant     */
+        2,   /* Swampert Brave        */
+        7,   /* Salamence Adamant     */
+        8,   /* Snorlax Careful       */
+        9,   /* Suicune Bold          */
     };
     u8 partySlot;
     ZeroPlayerPartyMons();
     for (partySlot = 0; partySlot < PARTY_SIZE; partySlot++)
     {
-        struct BoxPokemon *src = GetBoxedMonPtr(BOX_TOWER_FIGHTERS_L50,
+        struct BoxPokemon *src = GetBoxedMonPtr(BOX_TOWER_SAMPLES,
                                                 sRecommendedSlots[partySlot]);
         BoxMonToMon(src, &gPlayerParty[partySlot]);
         CalculateMonStats(&gPlayerParty[partySlot]);
