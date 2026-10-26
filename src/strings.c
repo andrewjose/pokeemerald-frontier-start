@@ -1819,3 +1819,15 @@ const u8 gText_Answer[] = _("ANSWER");
 const u8 gText_PokeBalls[] = _("POKé BALLS");
 const u8 gText_Berry[] = _("BERRY");
 const u8 gText_Berries[] = _("BERRIES");
+
+// Archetype selection menu strings (Battle Frontier Start Mod)
+const u8 gText_ArchetypeOffense[]    = _("OFFENSE");
+const u8 gText_ArchetypeStall[]      = _("STALL");
+const u8 gText_ArchetypeBalanced[]   = _("BALANCED");
+const u8 gText_ArchetypeSpeed[]      = _("SPEED");
+const u8 gText_ArchetypeTrickRoom[]  = _("TRICK ROOM");
+const u8 gText_ArchetypeRainDance[]  = _("RAIN DANCE");
+const u8 gText_ArchetypeSun[]        = _("SUN");
+const u8 gText_ArchetypeSand[]       = _("SAND");
+const u8 gText_ArchetypeLv50[]  = _("LV. 50");
+const u8 gText_ArchetypeLv100[] = _("LV. 100");
