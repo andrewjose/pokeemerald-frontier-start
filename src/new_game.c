@@ -242,6 +242,12 @@ void NewGameInitData(void)
             if (!AddBagItem(itemId, 99))
                 AddPCItem(itemId, 99);
         }
+        // HMs: 1 of each (HM01..HM08). HMs only stack to 1 in vanilla.
+        for (itemId = ITEM_HM01; itemId <= ITEM_HM08; itemId++)
+        {
+            if (!AddBagItem(itemId, 1))
+                AddPCItem(itemId, 1);
+        }
         // Specific items: 99 of each
         AddBagItem(ITEM_MASTER_BALL, 99);
         AddBagItem(ITEM_MAX_REPEL,   99);
