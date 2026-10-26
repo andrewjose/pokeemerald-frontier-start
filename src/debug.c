@@ -1541,7 +1541,7 @@ static void Debug_InitializeBattle(u8 taskId)
     }
     
     // Set terrain
-    gBattleTerrain = sDebugBattleData->battleTerrain;
+    gBattleEnvironment = sDebugBattleData->battleTerrain;
 
     // Set AI flags
     for (i = 0; i < ARRAY_COUNT(sDebugBattleData->aiFlags); i++)
@@ -1903,8 +1903,8 @@ static void DebugAction_Util_PoisonMons(u8 taskId)
     for (i = 0; i < PARTY_SIZE; i++)
     {
         if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES, 0)
-            && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES2) != SPECIES_NONE
-            && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES2) != SPECIES_EGG)
+            && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG) != SPECIES_NONE
+            && GetMonData(&gPlayerParty[i], MON_DATA_SPECIES_OR_EGG) != SPECIES_EGG)
         {
             u32 curStatus = STATUS1_POISON;
             SetMonData(&gPlayerParty[i], MON_DATA_STATUS, &curStatus);
@@ -3759,7 +3759,7 @@ static void DebugAction_Fill_PocketItems(u8 taskId)
 
     for (itemId = 1; itemId < ITEMS_COUNT; itemId++)
     {
-        if (ItemId_GetPocket(itemId) == POCKET_ITEMS && CheckBagHasSpace(itemId, MAX_BAG_ITEM_CAPACITY))
+        if (GetItemPocket(itemId) == POCKET_ITEMS && CheckBagHasSpace(itemId, MAX_BAG_ITEM_CAPACITY))
             AddBagItem(itemId, MAX_BAG_ITEM_CAPACITY);
     }
 }
@@ -3799,7 +3799,7 @@ static void DebugAction_Fill_PocketKeyItems(u8 taskId)
 
     for (itemId = 1; itemId < ITEMS_COUNT; itemId++)
     {
-        if (ItemId_GetPocket(itemId) == POCKET_KEY_ITEMS && CheckBagHasSpace(itemId, 1))
+        if (GetItemPocket(itemId) == POCKET_KEY_ITEMS && CheckBagHasSpace(itemId, 1))
             AddBagItem(itemId, 1);
     }
 }
