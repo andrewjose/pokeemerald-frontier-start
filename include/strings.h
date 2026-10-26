@@ -3026,4 +3026,17 @@ extern const u8 gText_BoxName[];
 extern const u8 gText_PkmnsNickname[];
 extern const u8 gText_TellHimTheWords[];
 
+// Archetype selection menu strings (Battle Frontier Start Mod)
+extern const u8 gText_ArchetypeOffense[];
+extern const u8 gText_ArchetypeStall[];
+extern const u8 gText_ArchetypeBalanced[];
+extern const u8 gText_ArchetypeSpeed[];
+extern const u8 gText_ArchetypeTrickRoom[];
+extern const u8 gText_ArchetypeRainDance[];
+extern const u8 gText_ArchetypeSun[];
+extern const u8 gText_ArchetypeSand[];
+
+extern const u8 gText_ArchetypeLv50[];
+extern const u8 gText_ArchetypeLv100[];
+
 #endif // GUARD_STRINGS_H

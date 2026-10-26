@@ -94,6 +94,7 @@ struct CableClubPlayer
 
 extern const struct MapLayout *const gMapLayouts[];
 extern const struct MapHeader *const *const gMapGroups[];
+extern const u8 ArchetypeSelect_Script[];
 
 static void Overworld_ResetStateAfterWhiteOut(void);
 static void CB2_ReturnToFieldLocal(void);
@@ -1539,7 +1540,8 @@ void CB2_NewGame(void)
     PlayTimeCounter_Start();
     ScriptContext_Init();
     UnlockPlayerFieldControls();
-    gFieldCallback = ExecuteTruckSequence;
+    gFieldCallback = FieldCB_ContinueScriptHandleMusic;
+    ScriptContext_SetupScript(ArchetypeSelect_Script);
     gFieldCallback2 = NULL;
     DoMapLoadLoop(&gMain.state);
     SetFieldVBlankCallback();

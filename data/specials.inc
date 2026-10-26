@@ -540,3 +540,12 @@ gSpecials::
 	def_special RemoveRecordsWindow
 	def_special CloseDeptStoreElevatorWindow
 	def_special TrySetBattleTowerLinkType
+	def_special GivePresetPartyAndFillBoxes
+	def_special GivePresetParty_Offense
+	def_special GivePresetParty_Stall
+	def_special GivePresetParty_Balanced
+	def_special GivePresetParty_SpeedControl
+	def_special GivePresetParty_TrickRoom
+	def_special GivePresetParty_Rain
+	def_special GivePresetParty_Sun
+	def_special GivePresetParty_Sand
