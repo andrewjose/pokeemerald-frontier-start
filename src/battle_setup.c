@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle.h"
+#include "battle_pyramid.h"
 #include "battle_setup.h"
 #include "battle_transition.h"
 #include "main.h"
@@ -460,7 +461,7 @@ void DoStandardWildBattle_Debug(void)
     StopPlayerAvatar();
     gMain.savedCallback = CB2_EndWildBattle;
     gBattleTypeFlags = 0;
-    if (InBattlePyramid())
+    if (InBattlePyramid_())
     {
         VarSet(VAR_TEMP_E, 0);
         gBattleTypeFlags |= BATTLE_TYPE_PYRAMID;
