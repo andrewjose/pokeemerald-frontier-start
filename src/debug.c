@@ -60,6 +60,7 @@
 #include "constants/songs.h"
 #include "constants/species.h"
 #include "constants/weather.h"
+#include "pokemon_editor.h"
 
 
 #if TX_DEBUG_SYSTEM_ENABLE == TRUE
@@ -361,6 +362,14 @@ static void DebugAction_Give_Item_SelectQuantity(u8 taskId);
 static void DebugAction_Give_AllTMs(u8 taskId);
 static void DebugAction_Give_PokemonSimple(u8 taskId);
 static void DebugAction_Give_PokemonComplex(u8 taskId);
+// v1.33 Pokemon editor entry points
+enum {
+    DEBUG_EDITOR_NEW,
+    DEBUG_EDITOR_PARTY,
+    DEBUG_EDITOR_PC,
+};
+
+static void Debug_OpenPokemonEditor(u8 taskId, u8 which);
 static void DebugAction_Give_Pokemon_SelectId(u8 taskId);
 static void DebugAction_Give_Pokemon_SelectLevel(u8 taskId);
 static void DebugAction_Give_Pokemon_SelectShiny(u8 taskId);
@@ -2839,6 +2848,12 @@ static void DebugAction_Give_PokemonSimple(u8 taskId)
 }
 static void DebugAction_Give_PokemonComplex(u8 taskId)
 {
+    Debug_OpenPokemonEditor(taskId, DEBUG_EDITOR_NEW);
+}
+
+// Pre-v1.33 "Pokemon (complex)" flow; no longer reachable from the menu
+static void __attribute__((unused)) DebugAction_Give_PokemonComplex_Old(u8 taskId)
+{
     u8 windowId;
 
     //Mon data struct
@@ -3607,23 +3622,97 @@ static void DebugAction_Give_DayCareEgg(u8 taskId)
 
 // *******************************
 // Actions Pokemon Creator
+// v1.33: "Party add", "Party edit" and "PC edit" (and Give > Pokemon
+// (complex)) open the Pokemon editor; the enemy/debug-battle/testing
+// entries below still use the raw creator.
+static bool8 FindFirstEditableBoxMon(u8 *boxId, u8 *boxPos)
+{
+    u8 box, pos;
+
+    for (box = 0; box < TOTAL_BOXES_COUNT; box++)
+    {
+        for (pos = 0; pos < IN_BOX_COUNT; pos++)
+        {
+            struct BoxPokemon *boxMon = GetBoxedMonPtr(box, pos);
+            if (GetBoxMonData(boxMon, MON_DATA_SPECIES) != SPECIES_NONE && !GetBoxMonData(boxMon, MON_DATA_IS_EGG))
+            {
+                *boxId = box;
+                *boxPos = pos;
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+static u8 FindFirstEditablePartyMon(void)
+{
+    u8 i;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES) != SPECIES_NONE && !GetMonData(&gPlayerParty[i], MON_DATA_IS_EGG))
+            return i;
+    }
+    return PARTY_SIZE;
+}
+
+static void Task_Debug_OpenPokemonEditor(u8 taskId)
+{
+    u8 boxId = 0, boxPos = 0;
+
+    if (gPaletteFade.active)
+        return;
+
+    CleanupOverworldWindowsAndTilemaps();
+    switch (gTasks[taskId].data[0])
+    {
+    case DEBUG_EDITOR_NEW:
+    default:
+        DestroyTask(taskId);
+        PokemonEditor_OpenNew(CB2_ReturnToFieldContinueScript);
+        break;
+    case DEBUG_EDITOR_PARTY:
+        DestroyTask(taskId);
+        PokemonEditor_OpenParty(FindFirstEditablePartyMon(), CB2_ReturnToFieldContinueScript);
+        break;
+    case DEBUG_EDITOR_PC:
+        FindFirstEditableBoxMon(&boxId, &boxPos);
+        DestroyTask(taskId);
+        PokemonEditor_OpenBox(boxId, boxPos, TRUE, CB2_ReturnToFieldContinueScript);
+        break;
+    }
+}
+
+static void Debug_OpenPokemonEditor(u8 taskId, u8 which)
+{
+    u8 boxId, boxPos;
+
+    Debug_DestroyMenu_Full(taskId);
+    if ((which == DEBUG_EDITOR_PARTY && FindFirstEditablePartyMon() == PARTY_SIZE)
+     || (which == DEBUG_EDITOR_PC && !FindFirstEditableBoxMon(&boxId, &boxPos)))
+    {
+        // Nothing to edit
+        PlaySE(SE_FAILURE);
+        ScriptContext_Enable();
+        return;
+    }
+    LockPlayerFieldControls();
+    BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+    gTasks[CreateTask(Task_Debug_OpenPokemonEditor, 0)].data[0] = which;
+}
+
 static void DebugAction_PkmCreator_Party_Add(u8 taskId)
 {
-    Debug_DestroyMenu_Full(taskId);
-    LockPlayerFieldControls();
-    DebugPkmCreator_Init(0, 0xFF);
+    Debug_OpenPokemonEditor(taskId, DEBUG_EDITOR_NEW);
 }
 static void DebugAction_PkmCreator_Party_Edit(u8 taskId)
 {
-    Debug_DestroyMenu_Full(taskId);
-    LockPlayerFieldControls();
-    DebugPkmCreator_Init(1, 0xFF);
+    Debug_OpenPokemonEditor(taskId, DEBUG_EDITOR_PARTY);
 }
 static void DebugAction_PkmCreator_PC_Edit(u8 taskId)
 {
-    Debug_DestroyMenu_Full(taskId);
-    LockPlayerFieldControls();
-    DebugPkmCreator_Init(2, 0xFF);
+    Debug_OpenPokemonEditor(taskId, DEBUG_EDITOR_PC);
 }
 static void DebugAction_PkmCreator_Enemy_Party_Edit(u8 taskId)
 {
