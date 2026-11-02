@@ -392,6 +392,7 @@ extern const struct SpriteTemplate gBattlerSpriteTemplates[];
 extern const s8 gNatureStatTable[][5];
 
 void ZeroBoxMonData(struct BoxPokemon *boxMon);
+void SetBoxMonPersonalityAndOtId(struct BoxPokemon *boxMon, u32 personality, u32 otId);
 void ZeroMonData(struct Pokemon *mon);
 void ZeroPlayerPartyMons(void);
 void ZeroEnemyPartyMons(void);

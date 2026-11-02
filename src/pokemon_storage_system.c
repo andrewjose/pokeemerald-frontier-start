@@ -41,6 +41,7 @@
 #include "constants/rgb.h"
 #include "constants/songs.h"
 #include "constants/pokemon_icon.h"
+#include "pokemon_editor.h"
 
 /*
     NOTE: This file is large. Some general groups of functions have
@@ -148,6 +149,7 @@ enum {
     MENU_POKECENTER,
     MENU_MACHINE,
     MENU_SIMPLE,
+    MENU_EDIT, // v1.33
 };
 #define MENU_WALLPAPER_SETS_START MENU_SCENERY_1
 #define MENU_WALLPAPERS_START MENU_FOREST
@@ -188,6 +190,7 @@ enum {
     SCREEN_CHANGE_SUMMARY_SCREEN,
     SCREEN_CHANGE_NAME_BOX,
     SCREEN_CHANGE_ITEM_FROM_BAG,
+    SCREEN_CHANGE_EDIT,
 };
 
 enum {
@@ -600,6 +603,7 @@ static void Task_ItemToBag(u8);
 static void Task_TakeItemForMoving(u8);
 static void Task_ShowMarkMenu(u8);
 static void Task_ShowMonSummary(u8);
+static void Task_EditMon(u8);
 static void Task_ReleaseMon(u8);
 static void Task_ReshowPokeStorage(u8);
 static void Task_PokeStorageMain(u8);
@@ -2114,6 +2118,10 @@ static void Task_InitPokeStorage(u8 taskId)
                 // Return from bag menu
                 GiveChosenBagItem();
                 break;
+            case SCREEN_CHANGE_EDIT - 1:
+                // Return from the Pokemon editor (it may have moved with L/R)
+                sCursorPosition = gLastViewedMonIndex;
+                break;
             }
         }
         LoadPokeStorageMenuGfx();
@@ -2684,6 +2692,10 @@ static void Task_OnSelectedMon(u8 taskId)
         case MENU_SUMMARY:
             PlaySE(SE_SELECT);
             SetPokeStorageTask(Task_ShowMonSummary);
+            break;
+        case MENU_EDIT:
+            PlaySE(SE_SELECT);
+            SetPokeStorageTask(Task_EditMon);
             break;
         case MENU_MARK:
             PlaySE(SE_SELECT);
@@ -3591,6 +3603,25 @@ static void Task_ShowMonSummary(u8 taskId)
     }
 }
 
+static void Task_EditMon(u8 taskId)
+{
+    switch (sStorage->state)
+    {
+    case 0:
+        BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
+        sStorage->state++;
+        break;
+    case 1:
+        if (!UpdatePaletteFade())
+        {
+            sWhichToReshow = SCREEN_CHANGE_EDIT - 1;
+            sStorage->screenChangeType = SCREEN_CHANGE_EDIT;
+            SetPokeStorageTask(Task_ChangeScreen);
+        }
+        break;
+    }
+}
+
 static void Task_GiveItemFromBag(u8 taskId)
 {
     switch (sStorage->state)
@@ -3768,6 +3799,13 @@ static void Task_ChangeScreen(u8 taskId)
     case SCREEN_CHANGE_ITEM_FROM_BAG:
         FreePokeStorageData();
         GoToBagMenu(ITEMMENULOCATION_PCBOX, 0, CB2_ReturnToPokeStorage);
+        break;
+    case SCREEN_CHANGE_EDIT:
+        FreePokeStorageData();
+        if (sCursorArea == CURSOR_AREA_IN_PARTY)
+            PokemonEditor_OpenParty(sCursorPosition, CB2_ReturnToPokeStorage);
+        else
+            PokemonEditor_OpenBox(StorageGetCurrentBox(), sCursorPosition, FALSE, CB2_ReturnToPokeStorage);
         break;
     }
 
@@ -7662,6 +7700,9 @@ static bool8 SetMenuTexts_Mon(void)
     }
 
     SetMenuText(MENU_SUMMARY);
+    if (!sIsMonBeingMoved && !sStorage->displayMonIsEgg && PokemonEditor_IsAllowed()
+     && (sCursorArea == CURSOR_AREA_IN_BOX || sCursorArea == CURSOR_AREA_IN_PARTY))
+        SetMenuText(MENU_EDIT);
     if (sStorage->boxOption == OPTION_MOVE_MONS)
     {
         if (sCursorArea == CURSOR_AREA_IN_BOX)
@@ -7934,6 +7975,8 @@ static void InitMenu(void)
     sStorage->menuWindow.baseBlock = 92;
 }
 
+static const u8 sPCText_Edit[] = _("EDIT");
+
 static const u8 *const sMenuTexts[] =
 {
     [MENU_CANCEL]     = gPCText_Cancel,
@@ -7943,6 +7986,7 @@ static const u8 *const sMenuTexts[] =
     [MENU_SHIFT]      = gPCText_Shift,
     [MENU_PLACE]      = gPCText_Place,
     [MENU_SUMMARY]    = gPCText_Summary,
+    [MENU_EDIT]       = sPCText_Edit,
     [MENU_RELEASE]    = gPCText_Release,
     [MENU_MARK]       = gPCText_Mark,
     [MENU_JUMP]       = gPCText_Jump,

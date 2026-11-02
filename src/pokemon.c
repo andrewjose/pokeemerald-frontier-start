@@ -3552,6 +3552,27 @@ static void DecryptBoxMon(struct BoxPokemon *boxMon)
     }
 }
 
+// Frontier Start v1.33 (Pokemon editor): changes a Pokemon's personality and
+// OT ID in place. Both key the encryption, and the personality also sets the
+// order of the substructs, so SetBoxMonData can't change them on a Pokemon
+// that already has data. The data is decrypted under the old values and
+// stored again under the new ones; nothing else changes.
+void SetBoxMonPersonalityAndOtId(struct BoxPokemon *boxMon, u32 personality, u32 otId)
+{
+    union PokemonSubstruct substructs[4];
+    u8 i;
+
+    DecryptBoxMon(boxMon);
+    for (i = 0; i < 4; i++)
+        substructs[i] = *GetSubstruct(boxMon, boxMon->personality, i);
+    boxMon->personality = personality;
+    boxMon->otId = otId;
+    for (i = 0; i < 4; i++)
+        *GetSubstruct(boxMon, boxMon->personality, i) = substructs[i];
+    boxMon->checksum = CalculateBoxMonChecksum(boxMon);
+    EncryptBoxMon(boxMon);
+}
+
 #define SUBSTRUCT_CASE(n, v1, v2, v3, v4)                               \
 case n:                                                                 \
     {                                                                   \
