@@ -145,6 +145,7 @@ SECTIONS {
         src/reshow_battle_screen.o(.text);
         src/battle_info_screen.o(.text);
         src/battle_info_damage.o(.text);
+        src/pokemon_editor.o(.text);
         src/battle_anim_status_effects.o(.text);
         src/title_screen.o(.text);
         src/field_weather.o(.text);
@@ -530,6 +531,7 @@ SECTIONS {
         src/reshow_battle_screen.o(.rodata);
         src/battle_info_screen.o(.rodata);
         src/battle_info_damage.o(.rodata);
+        src/pokemon_editor.o(.rodata);
         src/battle_anim_status_effects.o(.rodata);
         src/title_screen.o(.rodata);
         src/field_weather.o(.rodata);
