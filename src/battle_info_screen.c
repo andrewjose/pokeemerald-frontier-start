@@ -7,7 +7,11 @@
 // side, on the opponent currently in battle.
 //
 // Controls: D-pad = previous/next Pokemon, L/R/SELECT = switch side,
+//           A = toggle the stats table / damage calc (in battle),
 //           B/START = back to the battle.
+//
+// The damage view shows, for each of this Pokemon's moves, the damage range it
+// would do to the Pokemon selected on the other side (see battle_info_damage.c).
 //
 // The battle is suspended exactly like it is for the in-battle Bag and party
 // menu: the battle graphics are torn down, and ReshowBattleScreenAfterMenu
@@ -19,6 +23,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_anim.h"
+#include "battle_info_damage.h"
 #include "battle_info_screen.h"
 #include "battle_main.h"
 #include "bg.h"
@@ -104,6 +109,7 @@ struct BattleInfoScreen
     u8 iconSpriteIds[PARTY_SIZE];
     u8 iconCount;
     bool8 failed;
+    bool8 damageView;   // right panel shows the damage calc instead of stats
     u16 savedDispcnt;
     u16 savedBldcnt;
     u16 savedBldalpha;
@@ -236,6 +242,32 @@ static const u8 sText_Shiny[] = _("SHINY");
 static const u8 sText_Transformed[] = _("TRANSFORMED");
 static const u8 sText_EVTotal[] = _("EVs ");
 static const u8 sText_Controls[] = _("{L_BUTTON}{R_BUTTON} Side   {B_BUTTON} Back");
+static const u8 sText_ControlsBattle[] = _("{L_BUTTON}{R_BUTTON}Side {A_BUTTON}Dmg {B_BUTTON}Back");
+static const u8 sText_ControlsDamage[] = _("{L_BUTTON}{R_BUTTON}Side {A_BUTTON}Stat {B_BUTTON}Back");
+static const u8 sText_Vs[] = _("vs ");
+static const u8 sText_ColDmg[] = _("DMG%");
+static const u8 sText_ColKO[] = _("KO");
+static const u8 sText_ColCrit[] = _("CRIT%");
+static const u8 sText_Dash[] = _("-");
+static const u8 sText_Times[] = _("x");
+static const u8 sText_HKO[] = _("HKO");
+static const u8 sText_OHKO[] = _("OHKO");
+static const u8 sText_Maybe[] = _("?");
+static const u8 sText_Immune[] = _("IMMUNE");
+static const u8 sText_Fails[] = _("FAILS");
+static const u8 sText_Varies[] = _("VARIES");
+static const u8 sText_SwitchIn[] = _("As if switched in");
+static const u8 sText_NoTarget[] = _("No target");
+static const u8 sText_FieldRain[] = _("RAIN");
+static const u8 sText_FieldSun[] = _("SUN");
+static const u8 sText_FieldSand[] = _("SAND");
+static const u8 sText_FieldHail[] = _("HAIL");
+static const u8 sText_FieldReflect[] = _("REFLECT");
+static const u8 sText_FieldLightScreen[] = _("L.SCREEN");
+static const u8 sText_FieldMudSport[] = _("MUD SPORT");
+static const u8 sText_FieldWaterSport[] = _("WTR SPORT");
+static const u8 sText_FieldCharge[] = _("CHARGE");
+static const u8 sText_FieldFlashFire[] = _("FLASH FIRE");
 static const u8 sText_ControlsOneSide[] = _("{B_BUTTON} Back");
 static const u8 sText_Picked[] = _("PICK ");
 
@@ -280,6 +312,7 @@ static const u8 sColor_Header[]     = {COLOR_TRANSPARENT, COLOR_WHITE, COLOR_DAR
 #define L_EQUALS_A_GRACE_FRAMES 5
 
 static EWRAM_DATA u8 sLEqualsAGraceFrames = 0;
+static EWRAM_DATA bool8 sDamageViewLastUsed = FALSE; // reopen on the view used last
 
 static u8 CheckCombo(bool8 enabled)
 {
@@ -366,6 +399,7 @@ void ShowBattleInfoScreen(MainCallback exitCallback)
         return;
 
     sInfo->inBattle = TRUE;
+    sInfo->damageView = sDamageViewLastUsed;
     sInfo->numSides = INFO_SIDE_COUNT;
     sInfo->parties[INFO_SIDE_FOE] = gEnemyParty;
     sInfo->parties[INFO_SIDE_PLAYER] = gPlayerParty;
@@ -519,6 +553,14 @@ static void Task_BattleInfoInput(u8 taskId)
         PlaySE(SE_SELECT);
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
         gTasks[taskId].func = Task_BattleInfoExit;
+    }
+    else if ((gMain.newKeysRaw & A_BUTTON) && sInfo->inBattle)
+    {
+        // Raw A: with the L=A option, L sets A in newKeys and must only switch sides
+        PlaySE(SE_SELECT);
+        sInfo->damageView ^= 1;
+        sDamageViewLastUsed = sInfo->damageView;
+        DrawPage();
     }
     else if (JOY_NEW(L_BUTTON | R_BUTTON | SELECT_BUTTON) && sInfo->numSides > 1 && sInfo->count[side ^ 1] != 0)
     {
@@ -1090,8 +1132,286 @@ static void DrawRightPanel(const struct InfoPageData *data)
 
     // Controls
     y += LINE_HEIGHT;
-    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sInfo->numSides > 1 ? sText_Controls : sText_ControlsOneSide);
+    if (sInfo->inBattle)
+        PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sText_ControlsBattle);
+    else
+        PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sInfo->numSides > 1 ? sText_Controls : sText_ControlsOneSide);
 
+    PutWindowTilemap(WIN_RIGHT);
+    CopyWindowToVram(WIN_RIGHT, COPYWIN_FULL);
+}
+
+// ---------------------------------------------------------------------------
+// Damage view (right panel, in battle)
+// ---------------------------------------------------------------------------
+
+// Right edges of the damage columns. Widest values: "999-999" (35px), "9HKO?" (25px).
+#define DMG_COL_DMG    40
+#define DMG_COL_KO     71
+#define DMG_COL_CRIT   114
+#define MOVE_ROW_Y     77      // first move row, level with the moves on the left panel
+
+static const u8 *GetHpColor(u16 hp, u16 maxHp)
+{
+    if (hp == 0)
+        return sColor_Red;
+    if (hp * 2 > maxHp)
+        return sColor_Green;
+    if (hp * 5 > maxHp)
+        return sColor_Orange;
+    return sColor_Red;
+}
+
+static const u8 *GetStatusText(u16 hp, u32 status)
+{
+    if (hp == 0)
+        return sText_StatusFnt;
+    if (status & STATUS1_SLEEP)
+        return sText_StatusSlp;
+    if (status & STATUS1_TOXIC_POISON)
+        return sText_StatusTox;
+    if (status & STATUS1_POISON)
+        return sText_StatusPsn;
+    if (status & STATUS1_BURN)
+        return sText_StatusBrn;
+    if (status & STATUS1_FREEZE)
+        return sText_StatusFrz;
+    if (status & STATUS1_PARALYSIS)
+        return sText_StatusPar;
+    return NULL;
+}
+
+// "38-45" (percent of max HP, low end rounded down and high end up)
+static void FormatPercentRange(u8 *dst, s32 lo, s32 hi, u16 maxHp)
+{
+    s32 loPct, hiPct;
+
+    if (maxHp == 0)
+        maxHp = 1;
+    loPct = lo * 100 / maxHp;
+    hiPct = (hi * 100 + maxHp - 1) / maxHp;
+    if (loPct > 999)
+        loPct = 999;
+    if (hiPct > 999)
+        hiPct = 999;
+    dst = ConvertIntToDecimalStringN(dst, loPct, STR_CONV_MODE_LEFT_ALIGN, 3);
+    if (hiPct != loPct)
+    {
+        dst = StringCopy(dst, sText_Dash);
+        ConvertIntToDecimalStringN(dst, hiPct, STR_CONV_MODE_LEFT_ALIGN, 3);
+    }
+}
+
+// "OHKO" / "2HKO" when every roll does it; "OHKO?" / "2HKO?" when only some rolls do.
+static const u8 *FormatKO(u8 *dst, const struct DamageCalcResult *result, u16 hp)
+{
+    u32 guaranteed, possible;
+
+    *dst = EOS;
+    if (result->cantKO || hp == 0 || result->max <= 0)
+        return sColor_Normal;
+
+    possible = (hp + result->max - 1) / result->max;
+    guaranteed = (result->min > 0) ? (hp + result->min - 1) / result->min : 0xFF;
+    if (possible > 9)
+        return sColor_Normal;
+
+    if (possible == 1)
+    {
+        dst = StringCopy(dst, sText_OHKO);
+    }
+    else
+    {
+        dst = ConvertIntToDecimalStringN(dst, possible, STR_CONV_MODE_LEFT_ALIGN, 1);
+        dst = StringCopy(dst, sText_HKO);
+    }
+
+    if (guaranteed != possible)
+    {
+        StringCopy(dst, sText_Maybe);
+        return (possible == 1) ? sColor_Orange : sColor_Normal;
+    }
+    return (possible == 1) ? sColor_Red : sColor_Normal;
+}
+
+// Field conditions that change the numbers, e.g. "RAIN  REFLECT"
+static void DrawFieldEffects(u8 y, const struct DamageCalcMon *attacker, const struct DamageCalcMon *defender)
+{
+    const u8 *items[8];
+    u8 count = 0, i, x = COL_LABEL;
+    u16 weather = DamageCalc_GetActiveWeather();
+    u16 sideStatus = gSideStatuses[GetBattlerSide(defender->battler)];
+    bool8 mudSport = FALSE, waterSport = FALSE;
+
+    if (weather & B_WEATHER_RAIN)
+        items[count++] = sText_FieldRain;
+    else if (weather & B_WEATHER_SUN)
+        items[count++] = sText_FieldSun;
+    else if (weather & B_WEATHER_SANDSTORM)
+        items[count++] = sText_FieldSand;
+    else if (weather & B_WEATHER_HAIL)
+        items[count++] = sText_FieldHail;
+    if (sideStatus & SIDE_STATUS_REFLECT)
+        items[count++] = sText_FieldReflect;
+    if (sideStatus & SIDE_STATUS_LIGHTSCREEN)
+        items[count++] = sText_FieldLightScreen;
+    for (i = 0; i < gBattlersCount; i++)
+    {
+        if (gStatuses3[i] & STATUS3_MUDSPORT)
+            mudSport = TRUE;
+        if (gStatuses3[i] & STATUS3_WATERSPORT)
+            waterSport = TRUE;
+    }
+    if (mudSport)
+        items[count++] = sText_FieldMudSport;
+    if (waterSport)
+        items[count++] = sText_FieldWaterSport;
+    if (attacker->active && (gStatuses3[attacker->battler] & STATUS3_CHARGED_UP))
+        items[count++] = sText_FieldCharge;
+    if (attacker->active && (gBattleResources->flags->flags[attacker->battler] & RESOURCE_FLAG_FLASH_FIRE))
+        items[count++] = sText_FieldFlashFire;
+
+    for (i = 0; i < count; i++)
+    {
+        u8 width = GetStringWidth(FONT_SMALL, items[i], 0);
+        if (x + width > PANEL_WIDTH - 4)
+            break;
+        PrintText(WIN_RIGHT, x, y, sColor_Orange, items[i]);
+        x += width + 6;
+    }
+}
+
+static void DrawDamagePanel(const struct InfoPageData *data)
+{
+    u8 buffer[32];
+    u8 *end;
+    u8 y, i;
+    u8 side = sInfo->side;
+    u8 targetSide = side ^ 1;
+    u8 partyIndex = GetSelectedPartyIndex();
+    u8 targetIndex;
+    struct DamageCalcMon attacker, defender;
+    const struct BattlePokemon *target;
+    const u8 *statusText;
+
+    FillWindowPixelBuffer(WIN_RIGHT, PIXEL_FILL(COLOR_WHITE));
+
+    if (sInfo->count[targetSide] == 0)
+    {
+        PrintText(WIN_RIGHT, COL_LABEL, 2, sColor_Label, sText_NoTarget);
+        PrintText(WIN_RIGHT, COL_LABEL, 50, sColor_Label, sText_ControlsDamage);
+        PutWindowTilemap(WIN_RIGHT);
+        CopyWindowToVram(WIN_RIGHT, COPYWIN_FULL);
+        return;
+    }
+
+    // The target is whichever Pokemon is selected on the other side
+    targetIndex = sInfo->slots[targetSide][sInfo->cursor[targetSide]];
+    DamageCalc_InitMon(&attacker, GetSideParty(side), partyIndex, GetBattlerSideFor(side), GetActiveBattlerForSlot(side, partyIndex));
+    DamageCalc_InitMon(&defender, GetSideParty(targetSide), targetIndex, GetBattlerSideFor(targetSide), GetActiveBattlerForSlot(targetSide, targetIndex));
+    target = &defender.mon;
+
+    // Target: species and level
+    y = 2;
+    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sText_Vs);
+    PrintText(WIN_RIGHT, COL_LABEL + GetStringWidth(FONT_SMALL, sText_Vs, 0), y, sColor_Normal,
+              gSpeciesNames[GetMonData(&GetSideParty(targetSide)[targetIndex], MON_DATA_SPECIES)]);
+    end = StringCopy(buffer, sText_Lv);
+    ConvertIntToDecimalStringN(end, target->level, STR_CONV_MODE_LEFT_ALIGN, 3);
+    PrintTextRightAligned(WIN_RIGHT, PANEL_WIDTH - 4, y, sColor_Label, buffer);
+
+    // Target: HP and status
+    y += LINE_HEIGHT;
+    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sText_HP);
+    end = ConvertIntToDecimalStringN(buffer, target->hp, STR_CONV_MODE_LEFT_ALIGN, 3);
+    end = StringCopy(end, sText_Slash);
+    ConvertIntToDecimalStringN(end, target->maxHP, STR_CONV_MODE_LEFT_ALIGN, 3);
+    PrintText(WIN_RIGHT, COL_LABEL + 18, y, GetHpColor(target->hp, target->maxHP), buffer);
+    statusText = GetStatusText(target->hp, target->status1);
+    if (statusText != NULL)
+        PrintTextRightAligned(WIN_RIGHT, PANEL_WIDTH - 4, y, sColor_Red, statusText);
+
+    // Weather, screens and other modifiers in effect
+    y += LINE_HEIGHT;
+    DrawFieldEffects(y, &attacker, &defender);
+
+    // Either side not in battle: calc assumes it switches in (no stat stages)
+    y += LINE_HEIGHT;
+    if (!attacker.active || !defender.active)
+        PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Orange, sText_SwitchIn);
+
+    y += LINE_HEIGHT;
+    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sText_ControlsDamage);
+
+    // Column headings, then one row per move, level with the move list on the left
+    y = MOVE_ROW_Y - LINE_HEIGHT - 2;
+    PrintTextRightAligned(WIN_RIGHT, DMG_COL_DMG, y, sColor_Label, sText_ColDmg);
+    PrintTextRightAligned(WIN_RIGHT, DMG_COL_KO, y, sColor_Label, sText_ColKO);
+    PrintTextRightAligned(WIN_RIGHT, DMG_COL_CRIT, y, sColor_Label, sText_ColCrit);
+    FillWindowPixelRect(WIN_RIGHT, PIXEL_FILL(COLOR_SEPARATOR), 4, MOVE_ROW_Y - 2, PANEL_WIDTH - 8, 1);
+
+    y = MOVE_ROW_Y;
+    for (i = 0; i < MAX_MON_MOVES; i++, y += LINE_HEIGHT)
+    {
+        struct DamageCalcResult result;
+        const u8 *color;
+
+        if (data->moves[i] == MOVE_NONE)
+            continue;
+
+        DamageCalc_Move(&attacker, &defender, data->moves[i], &result);
+        switch (result.kind)
+        {
+        case DMG_CALC_STATUS:
+            PrintTextRightAligned(WIN_RIGHT, DMG_COL_DMG, y, sColor_Label, sText_Dash);
+            break;
+        case DMG_CALC_IMMUNE:
+            PrintTextRightAligned(WIN_RIGHT, DMG_COL_DMG, y, sColor_Blue, sText_Immune);
+            break;
+        case DMG_CALC_FAILS:
+            PrintTextRightAligned(WIN_RIGHT, DMG_COL_DMG, y, sColor_Label, sText_Fails);
+            break;
+        case DMG_CALC_VARIES:
+            PrintTextRightAligned(WIN_RIGHT, DMG_COL_DMG, y, sColor_Label, sText_Varies);
+            break;
+        case DMG_CALC_OHKO:
+            PrintTextRightAligned(WIN_RIGHT, DMG_COL_DMG, y, sColor_Red, sText_OHKO);
+            break;
+        case DMG_CALC_HIT:
+            if (result.effectiveness & MOVE_RESULT_SUPER_EFFECTIVE)
+                color = sColor_Red;
+            else if (result.effectiveness & MOVE_RESULT_NOT_VERY_EFFECTIVE)
+                color = sColor_Blue;
+            else
+                color = sColor_Normal;
+            FormatPercentRange(buffer, result.min, result.max, target->maxHP);
+            PrintTextRightAligned(WIN_RIGHT, DMG_COL_DMG, y, color, buffer);
+
+            color = FormatKO(buffer, &result, target->hp);
+            if (buffer[0] != EOS)
+                PrintTextRightAligned(WIN_RIGHT, DMG_COL_KO, y, color, buffer);
+
+            if (result.hasCrit)
+            {
+                FormatPercentRange(buffer, result.critMin, result.critMax, target->maxHP);
+                PrintTextRightAligned(WIN_RIGHT, DMG_COL_CRIT, y, sColor_Label, buffer);
+            }
+            else if (result.maxHits > 1)
+            {
+                end = StringCopy(buffer, sText_Times);
+                end = ConvertIntToDecimalStringN(end, result.minHits, STR_CONV_MODE_LEFT_ALIGN, 1);
+                if (result.maxHits != result.minHits)
+                {
+                    end = StringCopy(end, sText_Dash);
+                    ConvertIntToDecimalStringN(end, result.maxHits, STR_CONV_MODE_LEFT_ALIGN, 1);
+                }
+                PrintTextRightAligned(WIN_RIGHT, DMG_COL_CRIT, y, sColor_Label, buffer);
+            }
+            break;
+        }
+    }
+
+    // Vertical divider is on the left panel; nothing else to draw
     PutWindowTilemap(WIN_RIGHT);
     CopyWindowToVram(WIN_RIGHT, COPYWIN_FULL);
 }
@@ -1102,7 +1422,10 @@ static void DrawPage(void)
 
     GatherPageData(&data, sInfo->side, GetSelectedPartyIndex());
     DrawLeftPanel(&data);
-    DrawRightPanel(&data);
+    if (sInfo->damageView && sInfo->inBattle)
+        DrawDamagePanel(&data);
+    else
+        DrawRightPanel(&data);
 }
 
 // ---------------------------------------------------------------------------

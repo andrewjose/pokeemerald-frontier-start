@@ -139,6 +139,7 @@ SECTIONS {
         src/task.o(.text);
         src/reshow_battle_screen.o(.text);
         src/battle_info_screen.o(.text);
+        src/battle_info_damage.o(.text);
         src/battle_anim_status_effects.o(.text);
         src/title_screen.o(.text);
         src/field_weather.o(.text);
@@ -523,6 +524,7 @@ SECTIONS {
         data/map_events.o(.rodata);
         src/reshow_battle_screen.o(.rodata);
         src/battle_info_screen.o(.rodata);
+        src/battle_info_damage.o(.rodata);
         src/battle_anim_status_effects.o(.rodata);
         src/title_screen.o(.rodata);
         src/field_weather.o(.rodata);
