@@ -3,15 +3,18 @@
 // Press L+R on the battle action menu (FIGHT/BAG/POKEMON/RUN) or the move menu
 // to open a full-screen view of every Pokemon on both sides of the battle:
 // IVs, EVs, nature, stats, in-battle stat stages, ability, held item, HP,
-// status, Hidden Power and moves with PP. The screen opens on the opponent's
-// side, on the opponent currently in battle.
+// status, Hidden Power and moves with PP. The screen opens on the player's
+// side, on the Pokemon being given a command (v1.34; it used to open on the
+// opponent's side).
 //
-// Controls: D-pad = previous/next Pokemon, L/R/SELECT = switch side,
+// Controls: D-pad = previous/next Pokemon, L/R = switch side,
 //           A = toggle the stats table / damage calc (in battle),
+//           SELECT = next target (damage view) or switch side (stats view),
 //           B/START = back to the battle.
 //
 // The damage view shows, for each of this Pokemon's moves, the damage range it
 // would do to the Pokemon selected on the other side (see battle_info_damage.c).
+// That target is shown at the top of the panel with its icon, HP and status.
 //
 // The battle is suspended exactly like it is for the in-battle Bag and party
 // menu: the battle graphics are torn down, and ReshowBattleScreenAfterMenu
@@ -70,6 +73,11 @@ enum {
 #define ICON_X_SPACING   28
 #define ICON_Y           17
 
+// Damage view: the target's icon sits at the top-left of the right panel
+#define TARGET_ICON_X    (PANEL_WIDTH + 16)
+#define TARGET_ICON_Y    (4 * 8 + 15)
+#define TARGET_TEXT_X    34
+
 // Palette 15 color indices (copy of the standard menu palette, with a few
 // extra colors filled in below).
 #define COLOR_TRANSPARENT  0
@@ -108,6 +116,7 @@ struct BattleInfoScreen
     u8 cursor[INFO_SIDE_COUNT];
     u8 iconSpriteIds[PARTY_SIZE];
     u8 iconCount;
+    u8 targetIconId;    // damage view: the target's icon, or MAX_SPRITES
     bool8 failed;
     bool8 damageView;   // right panel shows the damage calc instead of stats
     u16 savedDispcnt;
@@ -163,6 +172,8 @@ static void DestroySideIcons(void);
 static void UpdateIconSelection(void);
 static void DrawHeader(void);
 static void DrawPage(void);
+static void RedrawDamagePanel(void);
+static void DestroyTargetIcon(void);
 static void GatherPageData(struct InfoPageData *data, u8 side, u8 partyIndex);
 
 static const struct BgTemplate sBgTemplates[] =
@@ -215,7 +226,6 @@ static const u8 sStatDisplayOrder[NUM_STATS] = {STAT_HP, STAT_ATK, STAT_DEF, STA
 
 static const u8 sText_Foe[] = _("FOE");
 static const u8 sText_Player[] = _("YOURS");
-static const u8 sText_Of[] = _(" of ");
 static const u8 sText_Lv[] = _("Lv");
 static const u8 sText_Male[] = _("♂");
 static const u8 sText_Female[] = _("♀");
@@ -241,9 +251,11 @@ static const u8 sText_Fainted[] = _("FAINTED");
 static const u8 sText_Shiny[] = _("SHINY");
 static const u8 sText_Transformed[] = _("TRANSFORMED");
 static const u8 sText_EVTotal[] = _("EVs ");
-static const u8 sText_Controls[] = _("{L_BUTTON}{R_BUTTON} Side   {B_BUTTON} Back");
-static const u8 sText_ControlsBattle[] = _("{L_BUTTON}{R_BUTTON}Side {A_BUTTON}Dmg {B_BUTTON}Back");
-static const u8 sText_ControlsDamage[] = _("{L_BUTTON}{R_BUTTON}Side {A_BUTTON}Stat {B_BUTTON}Back");
+// L/R (switch side) is shown in the header, next to the other side's name
+static const u8 sText_Controls[] = _("{B_BUTTON} Back");
+static const u8 sText_ControlsBattle[] = _("{A_BUTTON} Damage calc  {B_BUTTON} Back");
+static const u8 sText_ControlsDamage[] = _("{SELECT_BUTTON} Target  {A_BUTTON} Stats");
+static const u8 sText_HeaderSwitch[] = _("{L_BUTTON}{R_BUTTON}");
 static const u8 sText_Vs[] = _("vs ");
 static const u8 sText_ColDmg[] = _("DMG%");
 static const u8 sText_ColKO[] = _("KO");
@@ -305,8 +317,8 @@ static const u8 sColor_Green[]      = {COLOR_WHITE, COLOR_GREEN, COLOR_LIGHT_GRE
 static const u8 sColor_Orange[]     = {COLOR_WHITE, COLOR_ORANGE, COLOR_LIGHT_ORANGE};
 static const u8 sColor_Header[]     = {COLOR_TRANSPARENT, COLOR_WHITE, COLOR_DARK_GRAY};
 
-// With the L=A button option (the default on new saves in the Frontier Start
-// mod), a lone L press counts as A. Hold that A back for a few frames so that
+// With the L=A button option (the default on new saves before v1.34; still
+// selectable in OPTION), a lone L press counts as A. Hold that A back for a few frames so that
 // L landing slightly before R opens this screen instead of choosing FIGHT or a
 // move. A real A press, or letting go of L, delivers it immediately.
 #define L_EQUALS_A_GRACE_FRAMES 5
@@ -380,6 +392,7 @@ static bool8 AllocInfoScreen(MainCallback exitCallback)
     }
 
     sInfo->exitCallback = exitCallback;
+    sInfo->targetIconId = MAX_SPRITES;
     sInfo->savedDispcnt = GetGpuReg(REG_OFFSET_DISPCNT);
     sInfo->savedBldcnt = GetGpuReg(REG_OFFSET_BLDCNT);
     sInfo->savedBldalpha = GetGpuReg(REG_OFFSET_BLDALPHA);
@@ -562,6 +575,18 @@ static void Task_BattleInfoInput(u8 taskId)
         sDamageViewLastUsed = sInfo->damageView;
         DrawPage();
     }
+    else if (JOY_NEW(SELECT_BUTTON) && sInfo->damageView && sInfo->inBattle)
+    {
+        // Next target: the selected Pokemon on the other side
+        u8 targetSide = side ^ 1;
+        if (sInfo->count[targetSide] > 1)
+        {
+            PlaySE(SE_SELECT);
+            if (++sInfo->cursor[targetSide] >= sInfo->count[targetSide])
+                sInfo->cursor[targetSide] = 0;
+            RedrawDamagePanel();
+        }
+    }
     else if (JOY_NEW(L_BUTTON | R_BUTTON | SELECT_BUTTON) && sInfo->numSides > 1 && sInfo->count[side ^ 1] != 0)
     {
         PlaySE(SE_SELECT);
@@ -610,6 +635,7 @@ static void Task_BattleInfoExit(u8 taskId)
     if (!sInfo->failed)
     {
         DestroySideIcons();
+        DestroyTargetIcon();
         FreeMonIconPalettes();
     }
     FreeAllWindowBuffers();
@@ -725,7 +751,7 @@ static void BuildBattleSideLists(void)
         SetCursorToSlot(side, firstActive);
     }
 
-    sInfo->side = INFO_SIDE_FOE;
+    sInfo->side = INFO_SIDE_PLAYER;
 }
 
 static void BuildListSideLists(u8 startSide, u8 startSlot)
@@ -866,19 +892,32 @@ static const u8 *GetStageColor(s8 stage)
     return sColor_Label;
 }
 
+// Title and position on the first line ("YOURS 1/3"); the second line says
+// where L/R goes ("{L}{R} FOE").
 static void DrawHeader(void)
 {
-    u8 buffer[16];
+    u8 buffer[24];
     u8 *end;
+    u8 side = sInfo->side;
+    u8 x;
 
     FillWindowPixelBuffer(WIN_HEADER, PIXEL_FILL(COLOR_TRANSPARENT));
 
-    AddTextPrinterParameterized3(WIN_HEADER, FONT_NORMAL, 4, 1, sColor_Header, TEXT_SKIP_DRAW, sInfo->titles[sInfo->side]);
+    AddTextPrinterParameterized3(WIN_HEADER, FONT_NORMAL, 4, 1, sColor_Header, TEXT_SKIP_DRAW, sInfo->titles[side]);
+    x = 4 + GetStringWidth(FONT_NORMAL, sInfo->titles[side], 0) + 4;
 
-    end = ConvertIntToDecimalStringN(buffer, sInfo->cursor[sInfo->side] + 1, STR_CONV_MODE_LEFT_ALIGN, 1);
-    end = StringCopy(end, sText_Of);
-    ConvertIntToDecimalStringN(end, sInfo->count[sInfo->side], STR_CONV_MODE_LEFT_ALIGN, 1);
-    AddTextPrinterParameterized3(WIN_HEADER, FONT_SMALL, 4, 17, sColor_Header, TEXT_SKIP_DRAW, buffer);
+    end = ConvertIntToDecimalStringN(buffer, sInfo->cursor[side] + 1, STR_CONV_MODE_LEFT_ALIGN, 1);
+    end = StringCopy(end, sText_Slash);
+    ConvertIntToDecimalStringN(end, sInfo->count[side], STR_CONV_MODE_LEFT_ALIGN, 1);
+    AddTextPrinterParameterized3(WIN_HEADER, FONT_SMALL, x, 3, sColor_Header, TEXT_SKIP_DRAW, buffer);
+
+    if (sInfo->numSides > 1 && sInfo->count[side ^ 1] != 0)
+    {
+        end = StringCopy(buffer, sText_HeaderSwitch);
+        end = StringCopy(end, sText_Space);
+        StringCopy(end, sInfo->titles[side ^ 1]);
+        AddTextPrinterParameterized3(WIN_HEADER, FONT_SMALL, 4, 17, sColor_Header, TEXT_SKIP_DRAW, buffer);
+    }
 
     PutWindowTilemap(WIN_HEADER);
     CopyWindowToVram(WIN_HEADER, COPYWIN_FULL);
@@ -1235,10 +1274,10 @@ static const u8 *FormatKO(u8 *dst, const struct DamageCalcResult *result, u16 hp
 }
 
 // Field conditions that change the numbers, e.g. "RAIN  REFLECT"
-static void DrawFieldEffects(u8 y, const struct DamageCalcMon *attacker, const struct DamageCalcMon *defender)
+static void DrawFieldEffects(u8 x, u8 y, const struct DamageCalcMon *attacker, const struct DamageCalcMon *defender)
 {
     const u8 *items[8];
-    u8 count = 0, i, x = COL_LABEL;
+    u8 count = 0, i;
     u16 weather = DamageCalc_GetActiveWeather();
     u16 sideStatus = gSideStatuses[GetBattlerSide(defender->battler)];
     bool8 mudSport = FALSE, waterSport = FALSE;
@@ -1281,6 +1320,55 @@ static void DrawFieldEffects(u8 y, const struct DamageCalcMon *attacker, const s
     }
 }
 
+// A small HP bar (like the one in battle), width + 2 by 5 pixels with its border
+static void DrawHpBar(u8 windowId, u8 x, u8 y, u8 width, u16 hp, u16 maxHp)
+{
+    u32 fill = 0;
+    u8 color;
+
+    if (maxHp != 0 && hp != 0)
+    {
+        fill = ((u32)hp * width + maxHp - 1) / maxHp; // any HP left shows at least a pixel
+        if (fill > width)
+            fill = width;
+    }
+    if (hp * 2 > maxHp)
+        color = COLOR_GREEN;
+    else if (hp * 5 > maxHp)
+        color = COLOR_ORANGE;
+    else
+        color = COLOR_RED;
+
+    FillWindowPixelRect(windowId, PIXEL_FILL(COLOR_DARK_GRAY), x - 1, y - 1, width + 2, 5);
+    FillWindowPixelRect(windowId, PIXEL_FILL(COLOR_LIGHT_GRAY), x, y, width, 3);
+    if (fill != 0)
+        FillWindowPixelRect(windowId, PIXEL_FILL(color), x, y, fill, 3);
+}
+
+static void DestroyTargetIcon(void)
+{
+    if (sInfo->targetIconId < MAX_SPRITES)
+        FreeAndDestroyMonIconSprite(&gSprites[sInfo->targetIconId]);
+    sInfo->targetIconId = MAX_SPRITES;
+}
+
+// The damage view shows the target's icon at the top of the right panel
+static void UpdateTargetIcon(void)
+{
+    u8 targetSide = sInfo->side ^ 1;
+
+    DestroyTargetIcon();
+    if (sInfo->damageView && sInfo->inBattle && sInfo->count[targetSide] != 0)
+    {
+        struct Pokemon *mon = &GetSideParty(targetSide)[sInfo->slots[targetSide][sInfo->cursor[targetSide]]];
+        u8 spriteId = CreateMonIcon(GetMonData(mon, MON_DATA_SPECIES), SpriteCB_MonIcon, TARGET_ICON_X, TARGET_ICON_Y, 1,
+                                    GetMonData(mon, MON_DATA_PERSONALITY), TRUE);
+        if (spriteId < MAX_SPRITES)
+            gSprites[spriteId].oam.priority = 0;
+        sInfo->targetIconId = spriteId;
+    }
+}
+
 static void DrawDamagePanel(const struct InfoPageData *data)
 {
     u8 buffer[32];
@@ -1311,29 +1399,37 @@ static void DrawDamagePanel(const struct InfoPageData *data)
     DamageCalc_InitMon(&defender, GetSideParty(targetSide), targetIndex, GetBattlerSideFor(targetSide), GetActiveBattlerForSlot(targetSide, targetIndex));
     target = &defender.mon;
 
-    // Target: species and level
+    // The target, next to its icon (UpdateTargetIcon): species and level,
+    // HP and status, with an HP bar under the icon
+    // "vs SPECIES" on the first line, "Lv50 HP 153/153" on the second (a
+    // 10-letter name leaves no room for the level next to it)
     y = 2;
-    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sText_Vs);
-    PrintText(WIN_RIGHT, COL_LABEL + GetStringWidth(FONT_SMALL, sText_Vs, 0), y, sColor_Normal,
+    PrintText(WIN_RIGHT, TARGET_TEXT_X, y, sColor_Label, sText_Vs);
+    PrintText(WIN_RIGHT, TARGET_TEXT_X + GetStringWidth(FONT_SMALL, sText_Vs, 0), y, sColor_Normal,
               gSpeciesNames[GetMonData(&GetSideParty(targetSide)[targetIndex], MON_DATA_SPECIES)]);
-    end = StringCopy(buffer, sText_Lv);
-    ConvertIntToDecimalStringN(end, target->level, STR_CONV_MODE_LEFT_ALIGN, 3);
-    PrintTextRightAligned(WIN_RIGHT, PANEL_WIDTH - 4, y, sColor_Label, buffer);
 
-    // Target: HP and status
     y += LINE_HEIGHT;
-    PrintText(WIN_RIGHT, COL_LABEL, y, sColor_Label, sText_HP);
-    end = ConvertIntToDecimalStringN(buffer, target->hp, STR_CONV_MODE_LEFT_ALIGN, 3);
-    end = StringCopy(end, sText_Slash);
-    ConvertIntToDecimalStringN(end, target->maxHP, STR_CONV_MODE_LEFT_ALIGN, 3);
-    PrintText(WIN_RIGHT, COL_LABEL + 18, y, GetHpColor(target->hp, target->maxHP), buffer);
+    {
+        u8 x = TARGET_TEXT_X;
+        end = StringCopy(buffer, sText_Lv);
+        ConvertIntToDecimalStringN(end, target->level, STR_CONV_MODE_LEFT_ALIGN, 3);
+        PrintText(WIN_RIGHT, x, y, sColor_Label, buffer);
+        x += GetStringWidth(FONT_SMALL, buffer, 0) + 4;
+        PrintText(WIN_RIGHT, x, y, sColor_Label, sText_HP);
+        x += GetStringWidth(FONT_SMALL, sText_HP, 0) + 2;
+        end = ConvertIntToDecimalStringN(buffer, target->hp, STR_CONV_MODE_LEFT_ALIGN, 3);
+        end = StringCopy(end, sText_Slash);
+        ConvertIntToDecimalStringN(end, target->maxHP, STR_CONV_MODE_LEFT_ALIGN, 3);
+        PrintText(WIN_RIGHT, x, y, GetHpColor(target->hp, target->maxHP), buffer);
+    }
     statusText = GetStatusText(target->hp, target->status1);
     if (statusText != NULL)
         PrintTextRightAligned(WIN_RIGHT, PANEL_WIDTH - 4, y, sColor_Red, statusText);
+    DrawHpBar(WIN_RIGHT, 5, 33, 22, target->hp, target->maxHP);
 
     // Weather, screens and other modifiers in effect
     y += LINE_HEIGHT;
-    DrawFieldEffects(y, &attacker, &defender);
+    DrawFieldEffects(TARGET_TEXT_X, y, &attacker, &defender);
 
     // Either side not in battle: calc assumes it switches in (no stat stages)
     y += LINE_HEIGHT;
@@ -1426,6 +1522,17 @@ static void DrawPage(void)
         DrawDamagePanel(&data);
     else
         DrawRightPanel(&data);
+    UpdateTargetIcon();
+}
+
+// Only the target changed (SELECT in the damage view)
+static void RedrawDamagePanel(void)
+{
+    struct InfoPageData data;
+
+    GatherPageData(&data, sInfo->side, GetSelectedPartyIndex());
+    DrawDamagePanel(&data);
+    UpdateTargetIcon();
 }
 
 // ---------------------------------------------------------------------------
