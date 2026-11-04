@@ -29,6 +29,7 @@
 #include "battle_info_damage.h"
 #include "battle_info_screen.h"
 #include "battle_main.h"
+#include "battle_message.h"
 #include "bg.h"
 #include "data.h"
 #include "gpu_regs.h"
@@ -69,9 +70,12 @@ enum {
 
 #define PANEL_WIDTH      (15 * 8)
 #define LINE_HEIGHT      12
-#define ICON_X_START     76
-#define ICON_X_SPACING   28
+// Party icons line up at the right of the header (the last one centered at
+// ICON_X_LAST), leaving the left for the names
+#define ICON_X_LAST      222
 #define ICON_Y           17
+#define TITLE_LENGTH     32
+#define SHORT_NAME_LENGTH 16
 
 // Damage view: the target's icon sits at the top-left of the right panel
 #define TARGET_ICON_X    (PANEL_WIDTH + 16)
@@ -106,7 +110,8 @@ struct BattleInfoScreen
     u8 numSides;
     struct Pokemon *parties[INFO_SIDE_COUNT];
     u8 partySize[INFO_SIDE_COUNT];
-    const u8 *titles[INFO_SIDE_COUNT];
+    u8 titles[INFO_SIDE_COUNT][TITLE_LENGTH];          // e.g. "ANDREW", "COOLTRAINER JIM"
+    u8 shortNames[INFO_SIDE_COUNT][SHORT_NAME_LENGTH]; // e.g. "ANDREW", "JIM" (for the L/R hint)
     u16 colors[INFO_SIDE_COUNT];
     u8 picks[INFO_SIDE_COUNT][PARTY_SIZE];
     bool8 asHealed[INFO_SIDE_COUNT];
@@ -195,7 +200,7 @@ static const struct WindowTemplate sWindowTemplates[] =
         .bg = 0,
         .tilemapLeft = 0,
         .tilemapTop = 0,
-        .width = 8,
+        .width = 30, // full width: long trainer names; the icons sit on top
         .height = 4,
         .paletteNum = 15,
         .baseBlock = 1,
@@ -207,7 +212,7 @@ static const struct WindowTemplate sWindowTemplates[] =
         .width = 15,
         .height = 16,
         .paletteNum = 15,
-        .baseBlock = 1 + 8 * 4,
+        .baseBlock = 1 + 30 * 4,
     },
     [WIN_RIGHT] = {
         .bg = 0,
@@ -216,7 +221,7 @@ static const struct WindowTemplate sWindowTemplates[] =
         .width = 15,
         .height = 16,
         .paletteNum = 15,
-        .baseBlock = 1 + 8 * 4 + 15 * 16,
+        .baseBlock = 1 + 30 * 4 + 15 * 16,
     },
     DUMMY_WIN_TEMPLATE
 };
@@ -224,8 +229,12 @@ static const struct WindowTemplate sWindowTemplates[] =
 // Display order of the stats table (party/battle structs use HP, Atk, Def, Spe, SpA, SpD)
 static const u8 sStatDisplayOrder[NUM_STATS] = {STAT_HP, STAT_ATK, STAT_DEF, STAT_SPATK, STAT_SPDEF, STAT_SPEED};
 
-static const u8 sText_Foe[] = _("FOE");
-static const u8 sText_Player[] = _("YOURS");
+// Header names in battle (v1.35): your name, and the opponent's class and name
+static const u8 sText_TrainerAFull[] = _("{B_TRAINER1_CLASS} {B_TRAINER1_NAME}");
+static const u8 sText_TrainerAName[] = _("{B_TRAINER1_NAME}");
+static const u8 sText_TwoTrainers[] = _("{B_TRAINER1_NAME} & {B_TRAINER2_NAME}");
+static const u8 sText_Wild[] = _("WILD POKéMON");
+static const u8 sText_WildShort[] = _("WILD");
 static const u8 sText_Lv[] = _("Lv");
 static const u8 sText_Male[] = _("♂");
 static const u8 sText_Female[] = _("♀");
@@ -406,6 +415,45 @@ static bool8 AllocInfoScreen(MainCallback exitCallback)
     return TRUE;
 }
 
+// Copies at most size - 1 characters
+static void CopyName(u8 *dst, const u8 *src, u8 size)
+{
+    u8 i;
+
+    for (i = 0; i < size - 1 && src[i] != EOS; i++)
+        dst[i] = src[i];
+    dst[i] = EOS;
+}
+
+static void SetSideNames(u8 side, const u8 *title, const u8 *shortName)
+{
+    CopyName(sInfo->titles[side], title, TITLE_LENGTH);
+    CopyName(sInfo->shortNames[side], shortName != NULL ? shortName : title, SHORT_NAME_LENGTH);
+}
+
+// The opponent as the battle itself names them ("COOLTRAINER JIM")
+static void SetOpponentNames(void)
+{
+    u8 full[64];
+    u8 name[32];
+
+    if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+    {
+        SetSideNames(INFO_SIDE_FOE, sText_Wild, sText_WildShort);
+    }
+    else if (gBattleTypeFlags & BATTLE_TYPE_TWO_OPPONENTS)
+    {
+        BattleStringExpandPlaceholders(sText_TwoTrainers, full);
+        SetSideNames(INFO_SIDE_FOE, full, full);
+    }
+    else
+    {
+        BattleStringExpandPlaceholders(sText_TrainerAFull, full);
+        BattleStringExpandPlaceholders(sText_TrainerAName, name);
+        SetSideNames(INFO_SIDE_FOE, full, name);
+    }
+}
+
 void ShowBattleInfoScreen(MainCallback exitCallback)
 {
     if (!AllocInfoScreen(exitCallback))
@@ -418,8 +466,8 @@ void ShowBattleInfoScreen(MainCallback exitCallback)
     sInfo->parties[INFO_SIDE_PLAYER] = gPlayerParty;
     sInfo->partySize[INFO_SIDE_FOE] = PARTY_SIZE;
     sInfo->partySize[INFO_SIDE_PLAYER] = PARTY_SIZE;
-    sInfo->titles[INFO_SIDE_FOE] = sText_Foe;
-    sInfo->titles[INFO_SIDE_PLAYER] = sText_Player;
+    SetOpponentNames();
+    SetSideNames(INFO_SIDE_PLAYER, gSaveBlock2Ptr->playerName, NULL);
     sInfo->colors[INFO_SIDE_FOE] = BG_COLOR_FOE;
     sInfo->colors[INFO_SIDE_PLAYER] = BG_COLOR_PLAYER;
     BuildBattleSideLists();
@@ -443,7 +491,7 @@ void ShowMonListInfoScreen(const struct InfoScreenSideArgs *sides, u8 numSides, 
     {
         sInfo->parties[side] = sides[side].party;
         sInfo->partySize[side] = min(sides[side].count, PARTY_SIZE);
-        sInfo->titles[side] = sides[side].title;
+        SetSideNames(side, sides[side].title, sides[side].shortName);
         sInfo->colors[side] = sides[side].color;
         sInfo->asHealed[side] = sides[side].asHealed;
         for (i = 0; i < PARTY_SIZE; i++)
@@ -778,6 +826,24 @@ static u8 GetSelectedPartyIndex(void)
 // Party icon strip
 // ---------------------------------------------------------------------------
 
+static u8 GetIconSpacing(void)
+{
+    return (sInfo->count[sInfo->side] <= 4) ? 28 : 24;
+}
+
+static u8 GetIconX(u8 i)
+{
+    return ICON_X_LAST - GetIconSpacing() * (sInfo->count[sInfo->side] - 1 - i);
+}
+
+// Room for the names, left of the first icon
+static u8 GetHeaderTextWidth(void)
+{
+    if (sInfo->count[sInfo->side] == 0)
+        return 236;
+    return GetIconX(0) - 16 - 6;
+}
+
 static void CreateSideIcons(void)
 {
     u8 i;
@@ -789,7 +855,7 @@ static void CreateSideIcons(void)
         struct Pokemon *mon = &party[sInfo->slots[sInfo->side][i]];
         u16 species = GetMonData(mon, MON_DATA_SPECIES);
         u32 personality = GetMonData(mon, MON_DATA_PERSONALITY);
-        u8 spriteId = CreateMonIcon(species, SpriteCB_MonIcon, ICON_X_START + i * ICON_X_SPACING, ICON_Y, 1, personality, TRUE);
+        u8 spriteId = CreateMonIcon(species, SpriteCB_MonIcon, GetIconX(i), ICON_Y, 1, personality, TRUE);
 
         sInfo->iconSpriteIds[i] = spriteId;
         if (spriteId < MAX_SPRITES)
@@ -892,30 +958,44 @@ static const u8 *GetStageColor(s8 stage)
     return sColor_Label;
 }
 
-// Title and position on the first line ("YOURS 1/3"); the second line says
-// where L/R goes ("{L}{R} FOE").
+// The side's name and position on the first line ("COOLTRAINER JIM 1/3");
+// the second line says where L/R goes ("{L}{R} ANDREW"). A name too long
+// for the room left of the icons drops to the small font, then to the name
+// without the class.
 static void DrawHeader(void)
 {
-    u8 buffer[24];
+    u8 buffer[40];
+    u8 position[8];
     u8 *end;
     u8 side = sInfo->side;
-    u8 x;
+    u8 room = GetHeaderTextWidth();
+    u8 posWidth;
+    const u8 *title = sInfo->titles[side];
+    u8 font = FONT_NORMAL;
 
     FillWindowPixelBuffer(WIN_HEADER, PIXEL_FILL(COLOR_TRANSPARENT));
 
-    AddTextPrinterParameterized3(WIN_HEADER, FONT_NORMAL, 4, 1, sColor_Header, TEXT_SKIP_DRAW, sInfo->titles[side]);
-    x = 4 + GetStringWidth(FONT_NORMAL, sInfo->titles[side], 0) + 4;
-
-    end = ConvertIntToDecimalStringN(buffer, sInfo->cursor[side] + 1, STR_CONV_MODE_LEFT_ALIGN, 1);
+    end = ConvertIntToDecimalStringN(position, sInfo->cursor[side] + 1, STR_CONV_MODE_LEFT_ALIGN, 1);
     end = StringCopy(end, sText_Slash);
     ConvertIntToDecimalStringN(end, sInfo->count[side], STR_CONV_MODE_LEFT_ALIGN, 1);
-    AddTextPrinterParameterized3(WIN_HEADER, FONT_SMALL, x, 3, sColor_Header, TEXT_SKIP_DRAW, buffer);
+    posWidth = GetStringWidth(FONT_SMALL, position, 0);
+
+    if (4 + GetStringWidth(FONT_NORMAL, title, 0) + 4 + posWidth > room)
+    {
+        if (4 + GetStringWidth(FONT_SMALL, title, 0) + 4 + posWidth <= room)
+            font = FONT_SMALL;
+        else
+            title = sInfo->shortNames[side];
+    }
+    AddTextPrinterParameterized3(WIN_HEADER, font, 4, font == FONT_NORMAL ? 1 : 3, sColor_Header, TEXT_SKIP_DRAW, title);
+    AddTextPrinterParameterized3(WIN_HEADER, FONT_SMALL, 4 + GetStringWidth(font, title, 0) + 4, 3,
+                                 sColor_Header, TEXT_SKIP_DRAW, position);
 
     if (sInfo->numSides > 1 && sInfo->count[side ^ 1] != 0)
     {
         end = StringCopy(buffer, sText_HeaderSwitch);
         end = StringCopy(end, sText_Space);
-        StringCopy(end, sInfo->titles[side ^ 1]);
+        StringCopy(end, sInfo->shortNames[side ^ 1]);
         AddTextPrinterParameterized3(WIN_HEADER, FONT_SMALL, 4, 17, sColor_Header, TEXT_SKIP_DRAW, buffer);
     }
 
