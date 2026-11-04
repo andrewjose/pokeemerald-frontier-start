@@ -99,7 +99,7 @@ static void SetDefaultOptions(void)
     gSaveBlock2Ptr->optionsSound = OPTIONS_SOUND_STEREO;
     gSaveBlock2Ptr->optionsBattleStyle = OPTIONS_BATTLE_STYLE_SHIFT;
     gSaveBlock2Ptr->optionsBattleSceneOff = FALSE;
-    gSaveBlock2Ptr->optionsButtonMode = OPTIONS_BUTTON_MODE_L_EQUALS_A;
+    gSaveBlock2Ptr->optionsButtonMode = OPTIONS_BUTTON_MODE_NORMAL; // v1.34: was L=A
     gSaveBlock2Ptr->regionMapZoom = FALSE;
 }
 
@@ -267,7 +267,7 @@ void NewGameInitData(void)
     gSaveBlock2Ptr->optionsTextSpeed        = OPTIONS_TEXT_SPEED_FAST;
     gSaveBlock2Ptr->optionsWindowFrameType  = 1;
     gSaveBlock2Ptr->optionsSound            = OPTIONS_SOUND_STEREO;
-    gSaveBlock2Ptr->optionsButtonMode       = OPTIONS_BUTTON_MODE_L_EQUALS_A;
+    gSaveBlock2Ptr->optionsButtonMode       = OPTIONS_BUTTON_MODE_NORMAL; // v1.34: was L=A
     // Warp to the Battle Frontier OutsideWest plaza.
     // x=26, y=40 places the player in the central open area between facilities.
     SetWarpDestination(MAP_GROUP(MAP_BATTLE_FRONTIER_OUTSIDE_WEST),
