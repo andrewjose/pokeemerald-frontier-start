@@ -18,7 +18,8 @@ struct InfoScreenSideArgs
 {
     struct Pokemon *party;  // must stay valid until the screen exits
     u8 count;               // number of party slots to show (max PARTY_SIZE)
-    const u8 *title;        // header, e.g. "RENTALS"
+    const u8 *title;        // header, e.g. "RENTALS" (copied; at most 31 characters)
+    const u8 *shortName;    // for the other side's L/R hint, e.g. "JIM"; NULL = title
     u16 color;              // backdrop color
     const u8 *picks;        // optional per-slot pick order (1-3, 0 = not picked)
     bool8 asHealed;         // show full HP/PP and no status (e.g. Factory swap candidates)
