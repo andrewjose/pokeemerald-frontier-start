@@ -3,6 +3,7 @@
 #include "battle_anim.h"
 #include "battle_arena.h"
 #include "battle_controllers.h"
+#include "battle_damage_preview.h"
 #include "battle_dome.h"
 #include "battle_info_screen.h"
 #include "battle_interface.h"
@@ -363,7 +364,11 @@ static void HandleInputChooseTarget(void)
 {
     s32 i;
     u8 identities[MAX_BATTLERS_COUNT];
+    struct ChooseMoveStruct *moveInfo = (struct ChooseMoveStruct *)(&gBattleBufferA[gActiveBattler][4]);
     memcpy(identities, sTargetIdentities, ARRAY_COUNT(sTargetIdentities));
+
+    // v1.36: damage preview on the selected target's HP bar
+    DamagePreview_Update(gActiveBattler, moveInfo->moves[gMoveSelectionCursor[gActiveBattler]], gMultiUsePlayerCursor);
 
     DoBounceEffect(gMultiUsePlayerCursor, BOUNCE_HEALTHBOX, 15, 1);
 
@@ -387,6 +392,7 @@ static void HandleInputChooseTarget(void)
     if (JOY_NEW(A_BUTTON))
     {
         PlaySE(SE_SELECT);
+        DamagePreview_Hide();
         gSprites[gBattlerSpriteIds[gMultiUsePlayerCursor]].callback = SpriteCB_HideAsMoveTarget;
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, gMoveSelectionCursor[gActiveBattler] | (gMultiUsePlayerCursor << 8));
         EndBounceEffect(gMultiUsePlayerCursor, BOUNCE_HEALTHBOX);
@@ -395,6 +401,7 @@ static void HandleInputChooseTarget(void)
     else if (JOY_NEW(B_BUTTON) || gPlayerDpadHoldFrames > 59)
     {
         PlaySE(SE_SELECT);
+        DamagePreview_Hide();
         gSprites[gBattlerSpriteIds[gMultiUsePlayerCursor]].callback = SpriteCB_HideAsMoveTarget;
         gBattlerControllerFuncs[gActiveBattler] = HandleInputChooseMove;
         DoBounceEffect(gActiveBattler, BOUNCE_HEALTHBOX, 7, 1);
@@ -501,11 +508,15 @@ static void HandleInputChooseMove(void)
     else
         gPlayerDpadHoldFrames = 0;
 
+    // v1.36: damage preview on the HP bars of everything the move can hit
+    DamagePreview_Update(gActiveBattler, moveInfo->moves[gMoveSelectionCursor[gActiveBattler]], MAX_BATTLERS_COUNT);
+
     // Battle Info Screen: L+R opens the stats/IV/EV viewer.
     switch (BattleInfoScreen_CheckCombo())
     {
     case BATTLE_INFO_COMBO_OPEN:
         PlaySE(SE_SELECT);
+        DamagePreview_Hide();
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
         gBattlerControllerFuncs[gActiveBattler] = OpenBattleInfoFromMoveMenu;
         gBattlerInMenuId = gActiveBattler;
@@ -519,6 +530,7 @@ static void HandleInputChooseMove(void)
         u8 moveTarget;
 
         PlaySE(SE_SELECT);
+        DamagePreview_Hide();
         if (moveInfo->moves[gMoveSelectionCursor[gActiveBattler]] == MOVE_CURSE)
         {
             if (moveInfo->monTypes[0] != TYPE_GHOST && moveInfo->monTypes[1] != TYPE_GHOST)
@@ -579,6 +591,7 @@ static void HandleInputChooseMove(void)
     else if (JOY_NEW(B_BUTTON) || gPlayerDpadHoldFrames > 59)
     {
         PlaySE(SE_SELECT);
+        DamagePreview_Hide();
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_EXEC_SCRIPT, 0xFFFF);
         PlayerBufferExecCompleted();
     }
@@ -636,6 +649,7 @@ static void HandleInputChooseMove(void)
     {
         if (gNumberOfMovesToChoose > 1 && !(gBattleTypeFlags & BATTLE_TYPE_LINK))
         {
+            DamagePreview_Hide();
             MoveSelectionCreateCursorAt(gMoveSelectionCursor[gActiveBattler], 29);
 
             if (gMoveSelectionCursor[gActiveBattler] != 0)
@@ -2738,6 +2752,7 @@ static void PlayerHandleChooseMove(void)
     }
     else
     {
+        DamagePreview_Reset();
         InitMoveSelectionsVarsAndStrings();
         gBattlerControllerFuncs[gActiveBattler] = HandleChooseMoveAfterDma3;
     }
