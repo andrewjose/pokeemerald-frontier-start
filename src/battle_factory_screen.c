@@ -3,6 +3,7 @@
 #include "battle_factory_screen.h"
 #include "battle_factory.h"
 #include "battle_info_screen.h"
+#include "battle_setup.h"
 #include "sprite.h"
 #include "event_data.h"
 #include "overworld.h"
@@ -267,8 +268,7 @@ COMMON_DATA u8 (*gFactorySelect_CurrentOptionFunc)(void) = NULL;
 
 // L+R info screen
 static const u8 sInfoText_Rentals[] = _("RENTALS");
-static const u8 sInfoText_Theirs[] = _("FOE'S");
-static const u8 sInfoText_Yours[] = _("YOURS");
+static const u8 sInfoText_Theirs[] = _("FOE'S"); // Battle Tent swaps
 #define INFO_COLOR_RENTALS RGB(4, 13, 11)
 #define INFO_COLOR_THEIRS  RGB(19, 6, 7)
 #define INFO_COLOR_YOURS   RGB(5, 9, 19)
@@ -1554,6 +1554,7 @@ static void Select_Task_OpenInfoScreen(u8 taskId)
         side.party = sFactorySelectMons;
         side.count = SELECTABLE_MONS_COUNT;
         side.title = sInfoText_Rentals;
+        side.shortName = NULL;
         side.color = INFO_COLOR_RENTALS;
         side.picks = picks;
         side.asHealed = FALSE;
@@ -2518,6 +2519,10 @@ static void Swap_Task_OpenInfoScreen(u8 taskId)
     {
         struct InfoScreenSideArgs sides[2];
         u8 cursor = sFactorySwapScreen->cursorPos;
+        u8 foeName[32]; // class (up to 12) + space + name (up to 7)
+        u8 foeShortName[PLAYER_NAME_LENGTH + 1];
+        u8 *end;
+        u8 battleNum;
 
         DestroyTask(taskId);
         sFactorySwapScreen->fromInfoScreen = TRUE;
@@ -2527,15 +2532,36 @@ static void Swap_Task_OpenInfoScreen(u8 taskId)
         if (sFactorySwapScreen->cursorPos >= FRONTIER_PARTY_SIZE)
             sFactorySwapScreen->cursorPos = 0;
 
+        // v1.35: the sides are named after you and the trainer you just beat.
+        // By now the next opponent has been picked (gTrainerBattleOpponent_A),
+        // but the swap candidates are the last one's, kept in trainerIds.
+        battleNum = gSaveBlock2Ptr->frontier.curChallengeBattleNum;
+        if (gSaveBlock2Ptr->frontier.lvlMode != FRONTIER_LVL_TENT
+         && battleNum >= 1 && battleNum < FRONTIER_STAGES_PER_CHALLENGE)
+        {
+            u16 lastOpponent = gSaveBlock2Ptr->frontier.trainerIds[battleNum - 1];
+            end = StringCopy(foeName, gTrainerClassNames[GetFrontierOpponentClass(lastOpponent)]);
+            *end++ = CHAR_SPACE;
+            GetFrontierTrainerName(end, lastOpponent);
+            GetFrontierTrainerName(foeShortName, lastOpponent);
+        }
+        else
+        {
+            StringCopy(foeName, sInfoText_Theirs);
+            StringCopy(foeShortName, sInfoText_Theirs);
+        }
+
         sides[0].party = gEnemyParty;
         sides[0].count = FRONTIER_PARTY_SIZE;
-        sides[0].title = sInfoText_Theirs;
+        sides[0].title = foeName;
+        sides[0].shortName = foeShortName;
         sides[0].color = INFO_COLOR_THEIRS;
         sides[0].picks = NULL;
         sides[0].asHealed = TRUE; // they're healed before the next battle, like the rest of your party
         sides[1].party = gPlayerParty;
         sides[1].count = FRONTIER_PARTY_SIZE;
-        sides[1].title = sInfoText_Yours;
+        sides[1].title = gSaveBlock2Ptr->playerName;
+        sides[1].shortName = NULL;
         sides[1].color = INFO_COLOR_YOURS;
         sides[1].picks = NULL;
         sides[1].asHealed = FALSE;
