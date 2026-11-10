@@ -217,6 +217,8 @@ static void SetUp(u8 attacker, u16 move, u8 onlyTarget)
     for (target = 0; target < MAX_BATTLERS_COUNT; target++)
         sBars[target].active = FALSE;
 
+    if (gSaveBlock2Ptr->optionsDamagePreviewOff) // OPTION > DMG PREVIEW: OFF
+        return;
     if (move == MOVE_NONE || move >= MOVES_COUNT || gBattleMoves[move].power == 0)
         return;
 

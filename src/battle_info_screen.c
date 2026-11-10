@@ -799,7 +799,8 @@ static void BuildBattleSideLists(void)
         SetCursorToSlot(side, firstActive);
     }
 
-    sInfo->side = INFO_SIDE_PLAYER;
+    // v1.37: the foe's side first, unless OPTION > INFO START is YOURS
+    sInfo->side = gSaveBlock2Ptr->optionsInfoStartYours ? INFO_SIDE_PLAYER : INFO_SIDE_FOE;
 }
 
 static void BuildListSideLists(u8 startSide, u8 startSlot)

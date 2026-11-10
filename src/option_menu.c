@@ -11,6 +11,7 @@
 #include "strings.h"
 #include "task.h"
 #include "text.h"
+#include "list_menu.h"
 #include "text_window.h"
 #include "window.h"
 #include "gba/m4a_internal.h"
@@ -23,6 +24,9 @@
 #define tSound data[4]
 #define tButtonMode data[5]
 #define tWindowFrameType data[6]
+#define tDamagePreviewOff data[7]
+#define tInfoStartYours data[8]
+#define tArrowTaskId data[9]
 
 enum
 {
@@ -32,6 +36,8 @@ enum
     MENUITEM_SOUND,
     MENUITEM_BUTTONMODE,
     MENUITEM_FRAMETYPE,
+    MENUITEM_DMGPREVIEW,
+    MENUITEM_INFOSTART,
     MENUITEM_CANCEL,
     MENUITEM_COUNT,
 };
@@ -48,6 +54,16 @@ enum
 #define YPOS_SOUND        (MENUITEM_SOUND * 16)
 #define YPOS_BUTTONMODE   (MENUITEM_BUTTONMODE * 16)
 #define YPOS_FRAMETYPE    (MENUITEM_FRAMETYPE * 16)
+#define YPOS_DMGPREVIEW   (MENUITEM_DMGPREVIEW * 16)
+#define YPOS_INFOSTART    (MENUITEM_INFOSTART * 16)
+
+// v1.37: more options than fit, so the list scrolls 7 rows at a time
+#define VISIBLE_ITEMS     7
+#define LIST_TOP_Y        40
+#define SCROLL_ARROW_TAG  0x1100
+
+// The frame tiles, moved past the taller options window
+#define FRAME_TILES       0x220
 
 static void Task_OptionMenuFadeIn(u8 taskId);
 static void Task_OptionMenuProcessInput(u8 taskId);
@@ -66,11 +82,21 @@ static u8 FrameType_ProcessInput(u8 selection);
 static void FrameType_DrawChoices(u8 selection);
 static u8 ButtonMode_ProcessInput(u8 selection);
 static void ButtonMode_DrawChoices(u8 selection);
+static u8 OnOff_ProcessInput(u8 selection);
+static void DamagePreview_DrawChoices(u8 selection);
+static void InfoStart_DrawChoices(u8 selection);
+static void UpdateScroll(u8 selection);
 static void DrawHeaderText(void);
 static void DrawOptionMenuTexts(void);
 static void DrawBgWindowFrames(void);
 
 EWRAM_DATA static bool8 sArrowPressed = FALSE;
+EWRAM_DATA static u16 sScrollTop = 0;
+
+static const u8 sText_DamagePreview[] = _("DMG PREVIEW");
+static const u8 sText_InfoStart[] = _("INFO START");
+static const u8 sText_InfoStartFoe[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}FOE");
+static const u8 sText_InfoStartYours[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}YOURS");
 
 static const u16 sOptionMenuText_Pal[] = INCGFX_U16("graphics/interface/option_menu_text.pal", ".gbapal");
 // note: this is only used in the Japanese release
@@ -84,6 +110,8 @@ static const u8 *const sOptionMenuItemsNames[MENUITEM_COUNT] =
     [MENUITEM_SOUND]       = gText_Sound,
     [MENUITEM_BUTTONMODE]  = gText_ButtonMode,
     [MENUITEM_FRAMETYPE]   = gText_Frame,
+    [MENUITEM_DMGPREVIEW]  = sText_DamagePreview,
+    [MENUITEM_INFOSTART]   = sText_InfoStart,
     [MENUITEM_CANCEL]      = gText_OptionMenuCancel,
 };
 
@@ -103,7 +131,7 @@ static const struct WindowTemplate sOptionMenuWinTemplates[] =
         .tilemapLeft = 2,
         .tilemapTop = 5,
         .width = 26,
-        .height = 14,
+        .height = MENUITEM_COUNT * 2,
         .paletteNum = 1,
         .baseBlock = 0x36
     },
@@ -177,12 +205,15 @@ void CB2_InitOptionMenu(void)
         DeactivateAllTextPrinters();
         SetGpuReg(REG_OFFSET_WIN0H, 0);
         SetGpuReg(REG_OFFSET_WIN0V, 0);
-        SetGpuReg(REG_OFFSET_WININ, WININ_WIN0_BG0);
-        SetGpuReg(REG_OFFSET_WINOUT, WINOUT_WIN01_BG0 | WINOUT_WIN01_BG1 | WINOUT_WIN01_CLR);
+        // WIN1 clips the scrolling list to the inside of its frame
+        SetGpuReg(REG_OFFSET_WIN1H, WIN_RANGE(16, DISPLAY_WIDTH - 16));
+        SetGpuReg(REG_OFFSET_WIN1V, WIN_RANGE(LIST_TOP_Y, LIST_TOP_Y + VISIBLE_ITEMS * 16));
+        SetGpuReg(REG_OFFSET_WININ, WININ_WIN0_BG0 | WININ_WIN1_BG0 | WININ_WIN1_BG1 | WININ_WIN1_OBJ | WININ_WIN1_CLR);
+        SetGpuReg(REG_OFFSET_WINOUT, WINOUT_WIN01_BG1 | WINOUT_WIN01_OBJ | WINOUT_WIN01_CLR);
         SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG0 | BLDCNT_EFFECT_DARKEN);
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
         SetGpuReg(REG_OFFSET_BLDY, 4);
-        SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_WIN0_ON | DISPCNT_OBJ_ON | DISPCNT_OBJ_1D_MAP);
+        SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_WIN0_ON | DISPCNT_WIN1_ON | DISPCNT_OBJ_ON | DISPCNT_OBJ_1D_MAP);
         ShowBg(0);
         ShowBg(1);
         gMain.state++;
@@ -195,7 +226,7 @@ void CB2_InitOptionMenu(void)
         gMain.state++;
         break;
     case 3:
-        LoadBgTiles(1, GetWindowFrameTilesPal(gSaveBlock2Ptr->optionsWindowFrameType)->tiles, 0x120, 0x1A2);
+        LoadBgTiles(1, GetWindowFrameTilesPal(gSaveBlock2Ptr->optionsWindowFrameType)->tiles, 0x120, FRAME_TILES);
         gMain.state++;
         break;
     case 4:
@@ -234,6 +265,8 @@ void CB2_InitOptionMenu(void)
         gTasks[taskId].tSound = gSaveBlock2Ptr->optionsSound;
         gTasks[taskId].tButtonMode = gSaveBlock2Ptr->optionsButtonMode;
         gTasks[taskId].tWindowFrameType = gSaveBlock2Ptr->optionsWindowFrameType;
+        gTasks[taskId].tDamagePreviewOff = gSaveBlock2Ptr->optionsDamagePreviewOff;
+        gTasks[taskId].tInfoStartYours = gSaveBlock2Ptr->optionsInfoStartYours;
 
         TextSpeed_DrawChoices(gTasks[taskId].tTextSpeed);
         BattleScene_DrawChoices(gTasks[taskId].tBattleSceneOff);
@@ -241,6 +274,13 @@ void CB2_InitOptionMenu(void)
         Sound_DrawChoices(gTasks[taskId].tSound);
         ButtonMode_DrawChoices(gTasks[taskId].tButtonMode);
         FrameType_DrawChoices(gTasks[taskId].tWindowFrameType);
+        DamagePreview_DrawChoices(gTasks[taskId].tDamagePreviewOff);
+        InfoStart_DrawChoices(gTasks[taskId].tInfoStartYours);
+        sScrollTop = 0;
+        ChangeBgY(0, 0, BG_COORD_SET);
+        gTasks[taskId].tArrowTaskId = AddScrollIndicatorArrowPairParameterized(SCROLL_ARROW_UP, DISPLAY_WIDTH / 2, LIST_TOP_Y - 6,
+                                                                              LIST_TOP_Y + VISIBLE_ITEMS * 16 + 5, MENUITEM_COUNT - VISIBLE_ITEMS,
+                                                                              SCROLL_ARROW_TAG, SCROLL_ARROW_TAG, &sScrollTop);
         HighlightOptionMenuItem(gTasks[taskId].tMenuSelection);
 
         CopyWindowToVram(WIN_OPTIONS, COPYWIN_FULL);
@@ -329,6 +369,20 @@ static void Task_OptionMenuProcessInput(u8 taskId)
             if (previousOption != gTasks[taskId].tButtonMode)
                 ButtonMode_DrawChoices(gTasks[taskId].tButtonMode);
             break;
+        case MENUITEM_DMGPREVIEW:
+            previousOption = gTasks[taskId].tDamagePreviewOff;
+            gTasks[taskId].tDamagePreviewOff = OnOff_ProcessInput(gTasks[taskId].tDamagePreviewOff);
+
+            if (previousOption != gTasks[taskId].tDamagePreviewOff)
+                DamagePreview_DrawChoices(gTasks[taskId].tDamagePreviewOff);
+            break;
+        case MENUITEM_INFOSTART:
+            previousOption = gTasks[taskId].tInfoStartYours;
+            gTasks[taskId].tInfoStartYours = OnOff_ProcessInput(gTasks[taskId].tInfoStartYours);
+
+            if (previousOption != gTasks[taskId].tInfoStartYours)
+                InfoStart_DrawChoices(gTasks[taskId].tInfoStartYours);
+            break;
         case MENUITEM_FRAMETYPE:
             previousOption = gTasks[taskId].tWindowFrameType;
             gTasks[taskId].tWindowFrameType = FrameType_ProcessInput(gTasks[taskId].tWindowFrameType);
@@ -356,6 +410,9 @@ static void Task_OptionMenuSave(u8 taskId)
     gSaveBlock2Ptr->optionsSound = gTasks[taskId].tSound;
     gSaveBlock2Ptr->optionsButtonMode = gTasks[taskId].tButtonMode;
     gSaveBlock2Ptr->optionsWindowFrameType = gTasks[taskId].tWindowFrameType;
+    gSaveBlock2Ptr->optionsDamagePreviewOff = gTasks[taskId].tDamagePreviewOff;
+    gSaveBlock2Ptr->optionsInfoStartYours = gTasks[taskId].tInfoStartYours;
+    RemoveScrollIndicatorArrowPair(gTasks[taskId].tArrowTaskId);
 
     BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
     gTasks[taskId].func = Task_OptionMenuFadeOut;
@@ -371,10 +428,23 @@ static void Task_OptionMenuFadeOut(u8 taskId)
     }
 }
 
+static void UpdateScroll(u8 selection)
+{
+    if (selection < sScrollTop)
+        sScrollTop = selection;
+    else if (selection >= sScrollTop + VISIBLE_ITEMS)
+        sScrollTop = selection - (VISIBLE_ITEMS - 1);
+    ChangeBgY(0, (sScrollTop * 16) << 8, BG_COORD_SET);
+}
+
 static void HighlightOptionMenuItem(u8 index)
 {
+    u8 y;
+
+    UpdateScroll(index);
+    y = (index - sScrollTop) * 16 + LIST_TOP_Y;
     SetGpuReg(REG_OFFSET_WIN0H, WIN_RANGE(16, DISPLAY_WIDTH - 16));
-    SetGpuReg(REG_OFFSET_WIN0V, WIN_RANGE(index * 16 + 40, index * 16 + 56));
+    SetGpuReg(REG_OFFSET_WIN0V, WIN_RANGE(y, y + 16));
 }
 
 static void DrawOptionMenuChoice(const u8 *text, u8 x, u8 y, u8 style)
@@ -615,6 +685,39 @@ static void ButtonMode_DrawChoices(u8 selection)
     DrawOptionMenuChoice(gText_ButtonTypeLEqualsA, GetStringRightAlignXOffset(FONT_NORMAL, gText_ButtonTypeLEqualsA, 198), YPOS_BUTTONMODE, styles[2]);
 }
 
+// Two-choice options: left/right flips between 0 and 1
+static u8 OnOff_ProcessInput(u8 selection)
+{
+    if (JOY_NEW(DPAD_LEFT | DPAD_RIGHT))
+    {
+        selection ^= 1;
+        sArrowPressed = TRUE;
+    }
+    return selection;
+}
+
+static void DamagePreview_DrawChoices(u8 selection)
+{
+    u8 styles[2];
+
+    styles[0] = 0;
+    styles[1] = 0;
+    styles[selection] = 1;
+    DrawOptionMenuChoice(gText_BattleSceneOn, 104, YPOS_DMGPREVIEW, styles[0]);
+    DrawOptionMenuChoice(gText_BattleSceneOff, GetStringRightAlignXOffset(FONT_NORMAL, gText_BattleSceneOff, 198), YPOS_DMGPREVIEW, styles[1]);
+}
+
+static void InfoStart_DrawChoices(u8 selection)
+{
+    u8 styles[2];
+
+    styles[0] = 0;
+    styles[1] = 0;
+    styles[selection] = 1;
+    DrawOptionMenuChoice(sText_InfoStartFoe, 104, YPOS_INFOSTART, styles[0]);
+    DrawOptionMenuChoice(sText_InfoStartYours, GetStringRightAlignXOffset(FONT_NORMAL, sText_InfoStartYours, 198), YPOS_INFOSTART, styles[1]);
+}
+
 static void DrawHeaderText(void)
 {
     FillWindowPixelBuffer(WIN_HEADER, PIXEL_FILL(1));
@@ -632,14 +735,14 @@ static void DrawOptionMenuTexts(void)
     CopyWindowToVram(WIN_OPTIONS, COPYWIN_FULL);
 }
 
-#define TILE_TOP_CORNER_L 0x1A2
-#define TILE_TOP_EDGE     0x1A3
-#define TILE_TOP_CORNER_R 0x1A4
-#define TILE_LEFT_EDGE    0x1A5
-#define TILE_RIGHT_EDGE   0x1A7
-#define TILE_BOT_CORNER_L 0x1A8
-#define TILE_BOT_EDGE     0x1A9
-#define TILE_BOT_CORNER_R 0x1AA
+#define TILE_TOP_CORNER_L (FRAME_TILES + 0)
+#define TILE_TOP_EDGE     (FRAME_TILES + 1)
+#define TILE_TOP_CORNER_R (FRAME_TILES + 2)
+#define TILE_LEFT_EDGE    (FRAME_TILES + 3)
+#define TILE_RIGHT_EDGE   (FRAME_TILES + 5)
+#define TILE_BOT_CORNER_L (FRAME_TILES + 6)
+#define TILE_BOT_EDGE     (FRAME_TILES + 7)
+#define TILE_BOT_CORNER_R (FRAME_TILES + 8)
 
 static void DrawBgWindowFrames(void)
 {
