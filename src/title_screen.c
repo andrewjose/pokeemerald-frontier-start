@@ -29,11 +29,11 @@ enum {
     TAG_LOGO_SHINE,
 };
 
-#define VERSION_BANNER_RIGHT_TILEOFFSET 64
+#define VERSION_BANNER_RIGHT_TILEOFFSET 128 // v1.41: 64x64 halves (was 64x32, offset 64)
 #define VERSION_BANNER_LEFT_X 98
 #define VERSION_BANNER_RIGHT_X 162
-#define VERSION_BANNER_Y 2
-#define VERSION_BANNER_Y_GOAL 66
+#define VERSION_BANNER_Y (2 + 16)       // v1.41: +16 for the taller sprites, same top edge
+#define VERSION_BANNER_Y_GOAL (66 + 16)
 #define START_BANNER_X 128
 
 #define CLEAR_SAVE_BUTTON_COMBO (B_BUTTON | SELECT_BUTTON | DPAD_UP)
@@ -113,10 +113,10 @@ static const struct OamData sVersionBannerLeftOamData =
     .objMode = ST_OAM_OBJ_NORMAL,
     .mosaic = FALSE,
     .bpp = ST_OAM_8BPP,
-    .shape = SPRITE_SHAPE(64x32),
+    .shape = SPRITE_SHAPE(64x64),
     .x = 0,
     .matrixNum = 0,
-    .size = SPRITE_SIZE(64x32),
+    .size = SPRITE_SIZE(64x64),
     .tileNum = 0,
     .priority = 0,
     .paletteNum = 0,
@@ -130,10 +130,10 @@ static const struct OamData sVersionBannerRightOamData =
     .objMode = ST_OAM_OBJ_NORMAL,
     .mosaic = FALSE,
     .bpp = ST_OAM_8BPP,
-    .shape = SPRITE_SHAPE(64x32),
+    .shape = SPRITE_SHAPE(64x64),
     .x = 0,
     .matrixNum = 0,
-    .size = SPRITE_SIZE(64x32),
+    .size = SPRITE_SIZE(64x64),
     .tileNum = 0,
     .priority = 0,
     .paletteNum = 0,
@@ -188,7 +188,7 @@ static const struct CompressedSpriteSheet sSpriteSheet_EmeraldVersion[] =
 {
     {
         .data = gTitleScreenEmeraldVersionGfx,
-        .size = 0x1000,
+        .size = 0x2000, // v1.41: 128x64 at 8bpp (was 128x32)
         .tag = TAG_VERSION
     },
     {},
@@ -613,7 +613,7 @@ void CB2_InitTitleScreen(void)
         LoadCompressedSpriteSheet(&sSpriteSheet_EmeraldVersion[0]);
         LoadCompressedSpriteSheet(&sSpriteSheet_PressStart[0]);
         LoadCompressedSpriteSheet(&sPokemonLogoShineSpriteSheet[0]);
-        LoadPalette(gTitleScreenEmeraldVersionPal, OBJ_PLTT_ID(0), PLTT_SIZE_4BPP);
+        LoadPalette(gTitleScreenEmeraldVersionPal, OBJ_PLTT_ID(0), 2 * PLTT_SIZE_4BPP); // v1.41: 32 colors (BATTLE FRONTIER uses 16-21)
         LoadSpritePalette(&sSpritePalette_PressStart[0]);
         gMain.state = 2;
         break;

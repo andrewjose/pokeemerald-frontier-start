@@ -17,7 +17,8 @@ ArchetypeSelect_Script::
 	special HideMapNamePopUpWindow
 	delay 10
 
-@ v1.40: one line with the menu, no other dialog before or after
+@ v1.41: the overview first (also under GUIDE in the START menu), then the menu
+	call FrontierGuide_ShowText
 	message ArchetypeSelect_Text_Intro
 	waitmessage
 
@@ -38,3 +39,42 @@ ArchetypeSelect_ChooseArchetype::
 
 ArchetypeSelect_Text_Intro:
 	.string "Choose your fighting style.$"
+
+@ ---------------------------------------------------------------------------
+@ v1.41: overview of the hack, shown before the fighting-style menu and from
+@ GUIDE in the START menu.
+@ ---------------------------------------------------------------------------
+FrontierGuide_Script::
+	lockall
+	call FrontierGuide_ShowText
+	releaseall
+	end
+
+FrontierGuide_ShowText::
+	msgbox FrontierGuide_Text, MSGBOX_DEFAULT
+	return
+
+FrontierGuide_Text:
+	.string "Welcome to POKéMON EMERALD\n"
+	.string "BATTLE FRONTIER!\p"
+	.string "Every facility is open from the\n"
+	.string "start. Pick a team and go!\p"
+	.string "Your PC boxes hold ready-made\n"
+	.string "teams at Lv50 and Lv100, the\l"
+	.string "legendaries, and Battle Tower\l"
+	.string "sample teams.\p"
+	.string "In battle, press L+R to see stats,\n"
+	.string "IVs, EVs and damage for both sides.\p"
+	.string "When you pick a move, the foe's\n"
+	.string "HP bar shows the damage it can do.\p"
+	.string "Choose EDIT in the party menu or\n"
+	.string "the PC to change any POKéMON.\p"
+	.string "The move tutors' house has free\n"
+	.string "tutors, a move relearner and a\l"
+	.string "move deleter.\p"
+	.string "You can switch these features on\n"
+	.string "and off in OPTION.\p"
+	.string "Press R + START on the map for\n"
+	.string "the debug menu.\p"
+	.string "To read this again, choose GUIDE\n"
+	.string "in the START menu.$"
