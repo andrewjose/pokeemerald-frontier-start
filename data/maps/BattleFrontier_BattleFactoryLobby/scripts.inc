@@ -29,9 +29,11 @@ BattleFrontier_BattleFactoryLobby_EventScript_QuitWithoutSaving::
 	msgbox BattleFrontier_BattleFactoryLobby_Text_DidntSaveBeforeQuitting, MSGBOX_DEFAULT
 	closemessage
 	factory_setswapped
+	goto_if_set FLAG_OPT_KEEP_STREAK, BattleFrontier_BattleFactoryLobby_EventScript_KeepStreak @ v1.39: OPTION > KEEP STREAK
 	factory_set FACTORY_DATA_WIN_STREAK_SWAPS, 0
 	factory_set FACTORY_DATA_WIN_STREAK, 0
 	factory_set FACTORY_DATA_WIN_STREAK_ACTIVE, FALSE
+BattleFrontier_BattleFactoryLobby_EventScript_KeepStreak::
 	frontier_set FRONTIER_DATA_CHALLENGE_STATUS, 0
 	setvar VAR_TEMP_CHALLENGE_STATUS, 255
 	releaseall

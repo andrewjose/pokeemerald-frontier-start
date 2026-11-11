@@ -50,8 +50,10 @@ BattleFrontier_BattleTowerLobby_EventScript_QuitWithoutSaving::
 	faceplayer
 	msgbox BattleFrontier_BattleTowerLobby_Text_DidntSaveBeforeQuitting, MSGBOX_DEFAULT
 	closemessage
+	goto_if_set FLAG_OPT_KEEP_STREAK, BattleFrontier_BattleTowerLobby_EventScript_KeepStreak @ v1.39: OPTION > KEEP STREAK
 	tower_set TOWER_DATA_WIN_STREAK, 0
 	tower_set TOWER_DATA_WIN_STREAK_ACTIVE, FALSE
+BattleFrontier_BattleTowerLobby_EventScript_KeepStreak::
 	frontier_set FRONTIER_DATA_CHALLENGE_STATUS, 0
 	setvar VAR_TEMP_CHALLENGE_STATUS, 255
 	release

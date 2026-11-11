@@ -1834,9 +1834,12 @@ static void FillFactoryFrontierTrainerParty(u16 trainerId, u8 firstMonId)
     // Frontier-Start mod (v1.28): always take the BUGFIX path. In vanilla,
     // the wrong streak counter (Battle Tower's L50 streak) determines Battle
     // Factory opponent IVs; this forces the correct factoryWinStreaks lookup.
+        // v1.39: OPTION > FACTORY IVS can bring the vanilla bug back.
         u8 lvlMode = gSaveBlock2Ptr->frontier.lvlMode;
         u8 battleMode = VarGet(VAR_FRONTIER_BATTLE_MODE);
         u8 challengeNum = gSaveBlock2Ptr->frontier.factoryWinStreaks[battleMode][lvlMode] / FRONTIER_STAGES_PER_CHALLENGE;
+        if (FlagGet(FLAG_OPT_FACTORY_IV_VANILLA))
+            challengeNum = gSaveBlock2Ptr->frontier.towerWinStreaks[battleMode][FRONTIER_LVL_50] / FRONTIER_STAGES_PER_CHALLENGE;
         if (gSaveBlock2Ptr->frontier.curChallengeBattleNum < FRONTIER_STAGES_PER_CHALLENGE - 1)
             fixedIV = GetFactoryMonFixedIV(challengeNum, FALSE);
         else

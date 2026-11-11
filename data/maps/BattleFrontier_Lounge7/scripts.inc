@@ -246,9 +246,21 @@ BattleFrontier_Lounge7_EventScript_ConfirmMoveSelection::
 	copyvar VAR_0x8005, VAR_TEMP_FRONTIER_TUTOR_ID
 	special BufferBattleFrontierTutorMoveName
 	copyvar VAR_0x8004, VAR_TEMP_C
+	goto_if_set FLAG_OPT_TUTOR_COSTS_BP, BattleFrontier_Lounge7_EventScript_ConfirmMoveForBP
 	msgbox BattleFrontier_Lounge7_Text_TeachMoveFree, MSGBOX_YESNO
 	goto_if_eq VAR_RESULT, NO, BattleFrontier_Lounge7_EventScript_ChooseNewMove
 	goto BattleFrontier_Lounge7_EventScript_TeachTutorMove
+	end
+
+@ v1.39: OPTION > FREE TUTORS: OFF charges Battle Points, as in the original game
+BattleFrontier_Lounge7_EventScript_ConfirmMoveForBP::
+	buffernumberstring STR_VAR_2, VAR_0x8008
+	msgbox BattleFrontier_Lounge7_Text_MoveWillBeXBattlePoints, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, NO, BattleFrontier_Lounge7_EventScript_ChooseNewMove
+	specialvar VAR_TEMP_1, GetFrontierBattlePoints
+	goto_if_ge VAR_TEMP_1, VAR_0x8008, BattleFrontier_Lounge7_EventScript_TeachTutorMove
+	msgbox BattleFrontier_Lounge7_Text_HaventGotEnoughPoints, MSGBOX_DEFAULT
+	goto BattleFrontier_Lounge7_EventScript_ChooseNewMove
 	end
 
 BattleFrontier_Lounge7_EventScript_TeachTutorMove::
@@ -259,6 +271,11 @@ BattleFrontier_Lounge7_EventScript_TeachTutorMove::
 	special CloseBattleFrontierTutorWindow
 	special ChooseMonForMoveTutor
 	goto_if_eq VAR_RESULT, FALSE, BattleFrontier_Lounge7_EventScript_CancelChooseMon
+	goto_if_unset FLAG_OPT_TUTOR_COSTS_BP, BattleFrontier_Lounge7_EventScript_TaughtForFree
+	msgbox BattleFrontier_Lounge7_Text_IllTakeBattlePoints, MSGBOX_DEFAULT
+	copyvar VAR_0x8004, VAR_0x8008
+	special TakeFrontierBattlePoints
+BattleFrontier_Lounge7_EventScript_TaughtForFree::
 	release
 	end
 
@@ -624,3 +641,7 @@ BattleFrontier_Lounge7_Text_DeleterLastSurf:
 BattleFrontier_Lounge7_Text_DeleterComeAgain:
 	.string "Oh, is that so?\n"
 	.string "Do come again.$"
+
+BattleFrontier_Lounge7_Text_MoveWillBeXBattlePoints:
+	.string "The move {STR_VAR_1}, is it?\n"
+	.string "That will be {STR_VAR_2} Battle Points, okay?$"

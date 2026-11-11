@@ -24,6 +24,7 @@
 // (ShowMonListInfoScreen), used by the Battle Factory rental and swap screens.
 
 #include "global.h"
+#include "event_data.h"
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_info_damage.h"
@@ -381,13 +382,13 @@ static u8 CheckCombo(bool8 enabled)
 // For the battle action/move menus. Disabled in link battles and recorded-battle playback.
 u8 BattleInfoScreen_CheckCombo(void)
 {
-    return CheckCombo(!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED)));
+    return CheckCombo(!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED)) && !FlagGet(FLAG_OPT_INFO_SCREEN_OFF));
 }
 
 // For menus outside battle (Battle Factory rental/swap screens).
 u8 InfoScreen_CheckComboOutsideBattle(void)
 {
-    return CheckCombo(TRUE);
+    return CheckCombo(!FlagGet(FLAG_OPT_INFO_SCREEN_OFF)); // v1.39: OPTION > L+R INFO
 }
 
 static bool8 AllocInfoScreen(MainCallback exitCallback)
