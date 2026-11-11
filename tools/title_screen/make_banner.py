@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Draws graphics/title_screen/emerald_version.png for Frontier Start (v1.41):
+# Draws graphics/title_screen/emerald_version.png for Frontier Start (v1.41; larger BATTLE FRONTIER in v1.43):
 # the original "EMERALD" lettering, unchanged, with "VERSION" removed, and
 # "BATTLE FRONTIER" in classic blue outlined in navy underneath.
 #
@@ -13,8 +13,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 FONT = '/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf'
 W, H = 128, 64
-FRONTIER_TOP = 25
-FRONTIER_CENTER_X = 56  # under the middle of EMERALD (x 3-106), not the sprite
+FRONTIER_TOP = 27
+FRONTIER_CENTER_X = 64  # the sprite's middle: at size 12 it spans x 3-124
 KERNING = {'AT': -1, 'LE': -1}
 
 # Added colors, palette indices 16-21
@@ -57,7 +57,7 @@ def main(src, dst):
                 canvas.putpixel((x, y), c)
 
     # BATTLE FRONTIER
-    mask = text_mask('BATTLE FRONTIER', 10, 1)
+    mask = text_mask('BATTLE FRONTIER', 12, 1)  # 9 px capitals (v1.42: 7)
     w, h = mask.size
     x0, top = FRONTIER_CENTER_X - w // 2, FRONTIER_TOP
     fill = set((x0 + x, top + y) for y in range(h) for x in range(w) if mask.getpixel((x, y)))
