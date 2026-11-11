@@ -8,6 +8,13 @@
 #include "constants/items.h"
 #include "constants/pokemon.h"
 #include "constants/characters.h"
+#include "data/preset_boxes.h"
+
+/* v1.38: the preset boxes are baked into the ROM (src/data/preset_boxes.h)
+   instead of built Pokemon by Pokemon at new game, which took ~20 seconds.
+   Set to FALSE to build them the old way, e.g. to re-bake after changing a
+   filler (see tools/preset_boxes/bake.py). */
+#define PRESET_BOXES_BAKED TRUE
 
 #define ARCHETYPE_OFFENSE        0
 #define ARCHETYPE_STALL          1
@@ -794,6 +801,60 @@ static void FillPartyRecommended(void)
     gPlayerPartyCount = PARTY_SIZE;
 }
 
+/* A shiny personality for otId with the same nature, gender and ability as
+   oldPersonality: keep the low byte (gender, ability bit), pick the next byte
+   so the XOR of the halves matches the OT's, and check the nature. */
+static u32 GetShinyPersonalityForOtId(u32 oldPersonality, u32 otId)
+{
+    u32 key = (otId >> 16) ^ (otId & 0xFFFF);
+    u8 nature = oldPersonality % NUM_NATURES;
+    u32 lo, personality;
+
+    for (lo = oldPersonality & 0xFF; lo < 0x10000; lo += 0x100)
+    {
+        personality = ((key ^ lo) << 16) | lo;
+        if (personality % NUM_NATURES == nature)
+            return personality;
+    }
+    // Practically never reached: let the gender byte change, keep the ability bit
+    for (lo = oldPersonality & 1; lo < 0x10000; lo += 2)
+    {
+        personality = ((key ^ lo) << 16) | lo;
+        if (personality % NUM_NATURES == nature)
+            return personality;
+    }
+    return oldPersonality;
+}
+
+/* Copies the baked boxes into the PC and makes them the player's own:
+   their OT ID, name and gender. Shiny ones get a new personality that is
+   shiny for the player's ID; the rest keep theirs. */
+static void LoadBakedBoxes(void)
+{
+    u32 otId = gSaveBlock2Ptr->playerTrainerId[0]
+             | (gSaveBlock2Ptr->playerTrainerId[1] << 8)
+             | (gSaveBlock2Ptr->playerTrainerId[2] << 16)
+             | (gSaveBlock2Ptr->playerTrainerId[3] << 24);
+    u16 i;
+
+    for (i = 0; i < BAKED_BOX_COUNT; i++)
+        SetPresetBoxName(i, sBakedBoxNames[i]);
+
+    for (i = 0; i < ARRAY_COUNT(sBakedBoxMons); i++)
+    {
+        struct BoxPokemon *mon = GetBoxedMonPtr(sBakedBoxSlots[i][0], sBakedBoxSlots[i][1]);
+        u32 personality;
+
+        CpuCopy32(sBakedBoxMons[i], mon, sizeof(struct BoxPokemon));
+        personality = mon->personality;
+        if (IsShinyOtIdPersonality(BAKED_OT_ID, personality))
+            personality = GetShinyPersonalityForOtId(personality, otId);
+        SetBoxMonPersonalityAndOtId(mon, personality, otId);
+        SetBoxMonData(mon, MON_DATA_OT_NAME, gSaveBlock2Ptr->playerName);
+        SetBoxMonData(mon, MON_DATA_OT_GENDER, &gSaveBlock2Ptr->playerGender);
+    }
+}
+
 void GivePresetPartyAndFillBoxes(void)
 {
     u8 menuIndex = (u8)gSpecialVar_0x8004;
@@ -807,6 +868,12 @@ void GivePresetPartyAndFillBoxes(void)
         menuIndex = 0;
     archetype = sMenuToArchetype[menuIndex];
 
+    if (PRESET_BOXES_BAKED)
+    {
+        LoadBakedBoxes();
+    }
+    else
+    {
     /* Fill all 8 base archetype boxes: lv50 in slots 0-5, lv100 in slots 6-11 */
     for (i = 0; i < NUM_ARCHETYPES_BASE; i++)
     {
@@ -824,6 +891,7 @@ void GivePresetPartyAndFillBoxes(void)
     FillTowerFightersOverflowBox(BOX_TOWER_FIGHTERS_OVRF);
     FillTowerSamplesBox(BOX_TOWER_SAMPLES);
     FillTowerFightersBox(100, BOX_TOWER_FIGHTERS_L100);
+    }
 
     /* Now set the player's party based on chosen archetype */
     if (archetype < NUM_ARCHETYPES_BASE)
