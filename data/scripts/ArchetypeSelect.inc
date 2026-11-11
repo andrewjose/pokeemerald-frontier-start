@@ -28,11 +28,8 @@ ArchetypeSelect_ChooseArchetype::
 @ --- Always L50 spawn party ---
 	setvar VAR_0x8005, 50
 
-@ --- Display "please wait", run the heavy special, then close ---
-	message ArchetypeSelect_Text_PleaseWait
-	waitmessage
+@ --- Build the party and load the preset boxes (baked into the ROM since v1.38, so no wait) ---
 	special GivePresetPartyAndFillBoxes
-	closemessage
 
 	msgbox ArchetypeSelect_Text_Confirm, MSGBOX_DEFAULT
 	releaseall
@@ -41,10 +38,6 @@ ArchetypeSelect_ChooseArchetype::
 ArchetypeSelect_Text_Intro:
 	.string "Welcome to the Battle Frontier!\p"
 	.string "Choose your fighting style.$"
-
-ArchetypeSelect_Text_PleaseWait:
-	.string "Generating POKéMON…\n"
-	.string "This can take a moment.$"
 
 ArchetypeSelect_Text_Confirm:
 	.string "Your team is ready!\p"
