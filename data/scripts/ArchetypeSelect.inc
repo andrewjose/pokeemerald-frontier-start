@@ -17,7 +17,9 @@ ArchetypeSelect_Script::
 	special HideMapNamePopUpWindow
 	delay 10
 
-	msgbox ArchetypeSelect_Text_Intro, MSGBOX_DEFAULT
+@ v1.40: one line with the menu, no other dialog before or after
+	message ArchetypeSelect_Text_Intro
+	waitmessage
 
 @ --- Choose archetype ---
 ArchetypeSelect_ChooseArchetype::
@@ -30,20 +32,9 @@ ArchetypeSelect_ChooseArchetype::
 
 @ --- Build the party and load the preset boxes (baked into the ROM since v1.38, so no wait) ---
 	special GivePresetPartyAndFillBoxes
-
-	msgbox ArchetypeSelect_Text_Confirm, MSGBOX_DEFAULT
+	closemessage
 	releaseall
 	end
 
 ArchetypeSelect_Text_Intro:
-	.string "Welcome to the Battle Frontier!\p"
 	.string "Choose your fighting style.$"
-
-ArchetypeSelect_Text_Confirm:
-	.string "Your team is ready!\p"
-	.string "Additional teams and POKéMON\n"
-	.string "are waiting in your PC boxes.\p"
-	.string "Press R + START in the overworld\n"
-	.string "to open the debug menu for more\l"
-	.string "options.\p"
-	.string "Good luck, Trainer!$"
