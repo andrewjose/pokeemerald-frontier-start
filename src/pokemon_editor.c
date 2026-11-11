@@ -20,6 +20,7 @@
 // copies every other field back, so nothing else is lost.
 
 #include "global.h"
+#include "event_data.h"
 #include "battle_main.h"
 #include "battle_pike.h"
 #include "battle_pyramid.h"
@@ -433,6 +434,8 @@ static const u8 sColor_Label[]  = {COLOR_WHITE, COLOR_MID_GRAY, COLOR_LIGHT_GRAY
 bool8 PokemonEditor_IsAllowed(void)
 {
     if (InBattlePyramid_() || InBattlePike())
+        return FALSE;
+    if (FlagGet(FLAG_OPT_EDIT_OFF)) // v1.39: OPTION > EDIT MENU
         return FALSE;
     return TRUE;
 }

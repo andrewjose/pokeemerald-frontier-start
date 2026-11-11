@@ -55,6 +55,15 @@
 #define FLAG_UNUSED_0x029    0x29 // Unused Flag
 #define FLAG_UNUSED_0x02A    0x2A // Unused Flag
 #define FLAG_UNUSED_0x02B    0x2B // Unused Flag
+
+// v1.39: OPTION menu settings for Frontier Start's changes to the game.
+// Each flag is clear for Frontier Start's own behavior (a new save, or a save
+// from before v1.39) and set for the vanilla behavior / the other choice.
+#define FLAG_OPT_INFO_SCREEN_OFF    FLAG_UNUSED_0x027 // L+R info screen off
+#define FLAG_OPT_EDIT_OFF           FLAG_UNUSED_0x028 // no EDIT in the party menu / PC
+#define FLAG_OPT_TUTOR_COSTS_BP     FLAG_UNUSED_0x029 // Frontier move tutors charge BP (vanilla)
+#define FLAG_OPT_FACTORY_IV_VANILLA FLAG_UNUSED_0x02A // vanilla Battle Factory IV bug
+#define FLAG_OPT_KEEP_STREAK        FLAG_UNUSED_0x02B // keep streaks on quitting without saving
 #define FLAG_UNUSED_0x02C    0x2C // Unused Flag
 #define FLAG_UNUSED_0x02D    0x2D // Unused Flag
 #define FLAG_UNUSED_0x02E    0x2E // Unused Flag

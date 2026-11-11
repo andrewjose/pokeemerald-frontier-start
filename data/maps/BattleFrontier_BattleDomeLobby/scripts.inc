@@ -33,8 +33,10 @@ BattleFrontier_BattleDomeLobby_EventScript_QuitWithoutSaving::
 	lockall
 	msgbox BattleFrontier_BattleDomeLobby_Text_DidntSaveBeforeQuitting, MSGBOX_DEFAULT
 	closemessage
+	goto_if_set FLAG_OPT_KEEP_STREAK, BattleFrontier_BattleDomeLobby_EventScript_KeepStreak @ v1.39: OPTION > KEEP STREAK
 	dome_set DOME_DATA_WIN_STREAK, 0
 	dome_set DOME_DATA_WIN_STREAK_ACTIVE, FALSE
+BattleFrontier_BattleDomeLobby_EventScript_KeepStreak::
 	dome_set DOME_DATA_ATTEMPTED_CHALLENGE, TRUE
 	frontier_set FRONTIER_DATA_CHALLENGE_STATUS, 0
 	setvar VAR_TEMP_CHALLENGE_STATUS, 255

@@ -11,6 +11,7 @@
 #include "strings.h"
 #include "task.h"
 #include "text.h"
+#include "event_data.h"
 #include "list_menu.h"
 #include "text_window.h"
 #include "window.h"
@@ -27,6 +28,7 @@
 #define tDamagePreviewOff data[7]
 #define tInfoStartYours data[8]
 #define tArrowTaskId data[9]
+#define tFlagOptions(i) data[10 + (i)] // v1.39: the flag options, as left (0) / right (1)
 
 enum
 {
@@ -36,8 +38,13 @@ enum
     MENUITEM_SOUND,
     MENUITEM_BUTTONMODE,
     MENUITEM_FRAMETYPE,
-    MENUITEM_DMGPREVIEW,
+    MENUITEM_INFOSCREEN,
     MENUITEM_INFOSTART,
+    MENUITEM_DMGPREVIEW,
+    MENUITEM_EDITMENU,
+    MENUITEM_FREETUTORS,
+    MENUITEM_FACTORYIVS,
+    MENUITEM_KEEPSTREAK,
     MENUITEM_CANCEL,
     MENUITEM_COUNT,
 };
@@ -63,7 +70,7 @@ enum
 #define SCROLL_ARROW_TAG  0x1100
 
 // The frame tiles, moved past the taller options window
-#define FRAME_TILES       0x220
+#define FRAME_TILES       0x320
 
 static void Task_OptionMenuFadeIn(u8 taskId);
 static void Task_OptionMenuProcessInput(u8 taskId);
@@ -85,6 +92,7 @@ static void ButtonMode_DrawChoices(u8 selection);
 static u8 OnOff_ProcessInput(u8 selection);
 static void DamagePreview_DrawChoices(u8 selection);
 static void InfoStart_DrawChoices(u8 selection);
+static void FlagOption_DrawChoices(u8 i, u8 selection);
 static void UpdateScroll(u8 selection);
 static void DrawHeaderText(void);
 static void DrawOptionMenuTexts(void);
@@ -98,6 +106,35 @@ static const u8 sText_InfoStart[] = _("INFO START");
 static const u8 sText_InfoStartFoe[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}FOE");
 static const u8 sText_InfoStartYours[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}YOURS");
 
+// v1.39: options for Frontier Start's changes to the original game. Each is an
+// event flag that is clear for Frontier Start's behavior, so saves from before
+// v1.39 (and new games) keep it.
+static const u8 sText_InfoScreen[] = _("L+R INFO");
+static const u8 sText_EditMenu[] = _("EDIT MENU");
+static const u8 sText_FreeTutors[] = _("FREE TUTORS");
+static const u8 sText_FactoryIVs[] = _("FACTORY IVS");
+static const u8 sText_KeepStreak[] = _("KEEP STREAK");
+static const u8 sText_Fixed[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}FIXED");
+static const u8 sText_Vanilla[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}VANILLA");
+
+struct FlagOption
+{
+    u8 menuItem;
+    u16 flag;
+    const u8 *left;
+    const u8 *right;
+    bool8 setIsLeft; // the flag set means the left choice
+};
+
+static const struct FlagOption sFlagOptions[] =
+{
+    {MENUITEM_INFOSCREEN, FLAG_OPT_INFO_SCREEN_OFF,    gText_BattleSceneOn, gText_BattleSceneOff, FALSE},
+    {MENUITEM_EDITMENU,   FLAG_OPT_EDIT_OFF,           gText_BattleSceneOn, gText_BattleSceneOff, FALSE},
+    {MENUITEM_FREETUTORS, FLAG_OPT_TUTOR_COSTS_BP,     gText_BattleSceneOn, gText_BattleSceneOff, FALSE},
+    {MENUITEM_FACTORYIVS, FLAG_OPT_FACTORY_IV_VANILLA, sText_Fixed,         sText_Vanilla,        FALSE},
+    {MENUITEM_KEEPSTREAK, FLAG_OPT_KEEP_STREAK,        gText_BattleSceneOn, gText_BattleSceneOff, TRUE},
+};
+
 static const u16 sOptionMenuText_Pal[] = INCGFX_U16("graphics/interface/option_menu_text.pal", ".gbapal");
 // note: this is only used in the Japanese release
 static const u8 sEqualSignGfx[] = INCGFX_U8("graphics/interface/option_menu_equals_sign.png", ".4bpp");
@@ -110,8 +147,13 @@ static const u8 *const sOptionMenuItemsNames[MENUITEM_COUNT] =
     [MENUITEM_SOUND]       = gText_Sound,
     [MENUITEM_BUTTONMODE]  = gText_ButtonMode,
     [MENUITEM_FRAMETYPE]   = gText_Frame,
-    [MENUITEM_DMGPREVIEW]  = sText_DamagePreview,
+    [MENUITEM_INFOSCREEN]  = sText_InfoScreen,
     [MENUITEM_INFOSTART]   = sText_InfoStart,
+    [MENUITEM_DMGPREVIEW]  = sText_DamagePreview,
+    [MENUITEM_EDITMENU]    = sText_EditMenu,
+    [MENUITEM_FREETUTORS]  = sText_FreeTutors,
+    [MENUITEM_FACTORYIVS]  = sText_FactoryIVs,
+    [MENUITEM_KEEPSTREAK]  = sText_KeepStreak,
     [MENUITEM_CANCEL]      = gText_OptionMenuCancel,
 };
 
@@ -129,7 +171,7 @@ static const struct WindowTemplate sOptionMenuWinTemplates[] =
     [WIN_OPTIONS] = {
         .bg = 0,
         .tilemapLeft = 2,
-        .tilemapTop = 5,
+        .tilemapTop = 0, // v1.39: the list is taller than the screen; BG0 is scrolled to place it
         .width = 26,
         .height = MENUITEM_COUNT * 2,
         .paletteNum = 1,
@@ -276,6 +318,15 @@ void CB2_InitOptionMenu(void)
         FrameType_DrawChoices(gTasks[taskId].tWindowFrameType);
         DamagePreview_DrawChoices(gTasks[taskId].tDamagePreviewOff);
         InfoStart_DrawChoices(gTasks[taskId].tInfoStartYours);
+        {
+            u8 i;
+
+            for (i = 0; i < ARRAY_COUNT(sFlagOptions); i++)
+            {
+                gTasks[taskId].tFlagOptions(i) = (FlagGet(sFlagOptions[i].flag) == sFlagOptions[i].setIsLeft) ? 0 : 1;
+                FlagOption_DrawChoices(i, gTasks[taskId].tFlagOptions(i));
+            }
+        }
         sScrollTop = 0;
         ChangeBgY(0, 0, BG_COORD_SET);
         gTasks[taskId].tArrowTaskId = AddScrollIndicatorArrowPairParameterized(SCROLL_ARROW_UP, DISPLAY_WIDTH / 2, LIST_TOP_Y - 6,
@@ -383,6 +434,26 @@ static void Task_OptionMenuProcessInput(u8 taskId)
             if (previousOption != gTasks[taskId].tInfoStartYours)
                 InfoStart_DrawChoices(gTasks[taskId].tInfoStartYours);
             break;
+        case MENUITEM_INFOSCREEN:
+        case MENUITEM_EDITMENU:
+        case MENUITEM_FREETUTORS:
+        case MENUITEM_FACTORYIVS:
+        case MENUITEM_KEEPSTREAK:
+        {
+            u8 i;
+
+            for (i = 0; i < ARRAY_COUNT(sFlagOptions); i++)
+            {
+                if (sFlagOptions[i].menuItem == gTasks[taskId].tMenuSelection)
+                {
+                    previousOption = gTasks[taskId].tFlagOptions(i);
+                    gTasks[taskId].tFlagOptions(i) = OnOff_ProcessInput(previousOption);
+                    if (previousOption != gTasks[taskId].tFlagOptions(i))
+                        FlagOption_DrawChoices(i, gTasks[taskId].tFlagOptions(i));
+                }
+            }
+            break;
+        }
         case MENUITEM_FRAMETYPE:
             previousOption = gTasks[taskId].tWindowFrameType;
             gTasks[taskId].tWindowFrameType = FrameType_ProcessInput(gTasks[taskId].tWindowFrameType);
@@ -413,6 +484,18 @@ static void Task_OptionMenuSave(u8 taskId)
     gSaveBlock2Ptr->optionsDamagePreviewOff = gTasks[taskId].tDamagePreviewOff;
     gSaveBlock2Ptr->optionsInfoStartYours = gTasks[taskId].tInfoStartYours;
     RemoveScrollIndicatorArrowPair(gTasks[taskId].tArrowTaskId);
+    {
+        u8 i;
+
+        for (i = 0; i < ARRAY_COUNT(sFlagOptions); i++)
+        {
+            // left (0) is the flag set exactly when setIsLeft
+            if ((gTasks[taskId].tFlagOptions(i) == 0) == sFlagOptions[i].setIsLeft)
+                FlagSet(sFlagOptions[i].flag);
+            else
+                FlagClear(sFlagOptions[i].flag);
+        }
+    }
 
     BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
     gTasks[taskId].func = Task_OptionMenuFadeOut;
@@ -434,7 +517,8 @@ static void UpdateScroll(u8 selection)
         sScrollTop = selection;
     else if (selection >= sScrollTop + VISIBLE_ITEMS)
         sScrollTop = selection - (VISIBLE_ITEMS - 1);
-    ChangeBgY(0, (sScrollTop * 16) << 8, BG_COORD_SET);
+    // The window starts at the top of BG0's tilemap; scroll it down to the list area
+    ChangeBgY(0, ((sScrollTop * 16 - LIST_TOP_Y) & 0xFF) << 8, BG_COORD_SET);
 }
 
 static void HighlightOptionMenuItem(u8 index)
@@ -716,6 +800,18 @@ static void InfoStart_DrawChoices(u8 selection)
     styles[selection] = 1;
     DrawOptionMenuChoice(sText_InfoStartFoe, 104, YPOS_INFOSTART, styles[0]);
     DrawOptionMenuChoice(sText_InfoStartYours, GetStringRightAlignXOffset(FONT_NORMAL, sText_InfoStartYours, 198), YPOS_INFOSTART, styles[1]);
+}
+
+static void FlagOption_DrawChoices(u8 i, u8 selection)
+{
+    u8 styles[2];
+    u8 y = sFlagOptions[i].menuItem * 16;
+
+    styles[0] = 0;
+    styles[1] = 0;
+    styles[selection] = 1;
+    DrawOptionMenuChoice(sFlagOptions[i].left, 104, y, styles[0]);
+    DrawOptionMenuChoice(sFlagOptions[i].right, GetStringRightAlignXOffset(FONT_NORMAL, sFlagOptions[i].right, 198), y, styles[1]);
 }
 
 static void DrawHeaderText(void)
