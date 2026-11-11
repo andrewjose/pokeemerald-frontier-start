@@ -30,8 +30,8 @@ enum {
 };
 
 #define VERSION_BANNER_RIGHT_TILEOFFSET 128 // v1.41: 64x64 halves (was 64x32, offset 64)
-#define VERSION_BANNER_LEFT_X 98
-#define VERSION_BANNER_RIGHT_X 162
+#define VERSION_BANNER_LEFT_X (98 - 8)   // v1.44: -8, the banner art moved 8 px right
+#define VERSION_BANNER_RIGHT_X (162 - 8)
 #define VERSION_BANNER_Y (2 + 16)       // v1.41: +16 for the taller sprites, same top edge
 #define VERSION_BANNER_Y_GOAL (66 + 16)
 #define START_BANNER_X 128
