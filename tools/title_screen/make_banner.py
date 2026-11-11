@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# Draws graphics/title_screen/emerald_version.png for Frontier Start (v1.41; larger BATTLE FRONTIER in v1.43):
+# Draws graphics/title_screen/emerald_version.png for Frontier Start (v1.41; larger BATTLE FRONTIER in v1.43;
+# centered under EMERALD with a soft drop shadow in v1.44):
 # the original "EMERALD" lettering, unchanged, with "VERSION" removed, and
 # "BATTLE FRONTIER" in classic blue outlined in navy underneath.
 #
@@ -14,7 +15,12 @@ from PIL import Image, ImageDraw, ImageFont
 FONT = '/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf'
 W, H = 128, 64
 FRONTIER_TOP = 27
-FRONTIER_CENTER_X = 64  # the sprite's middle: at size 12 it spans x 3-124
+# EMERALD moves EMERALD_SHIFT pixels right inside the banner, and the sprites
+# move the same distance left (VERSION_BANNER_*_X in src/title_screen.c), so it
+# stays where it was on screen and BATTLE FRONTIER has room to be centered under it.
+EMERALD_SHIFT = 8
+FRONTIER_CENTER_X = 55 + EMERALD_SHIFT  # EMERALD spans x 3-106 before the shift
+SHADOW_OFFSET = (2, 2)
 KERNING = {'AT': -1, 'LE': -1}
 
 # Added colors, palette indices 16-21
@@ -25,7 +31,7 @@ NEW_COLORS = [
     (115, 164, 230),  # 18
     (49, 106, 189),   # 19
     (16, 76, 131),    # 20 classic blue, bottom (Pantone Classic Blue, #0F4C81)
-    (8, 20, 48),      # 21 drop shadow: deep navy
+    (36, 72, 96),     # 21 drop shadow: soft slate blue, a little darker than the sky
 ]
 
 def text_mask(text, size, spacing):
@@ -54,12 +60,12 @@ def main(src, dst):
         for x in range(vanilla.width):
             c = vanilla.getpixel((x, y))
             if c and (y <= 18 or x < 18 or x >= 88):
-                canvas.putpixel((x, y), c)
+                canvas.putpixel((x + EMERALD_SHIFT, y), c)
 
     # BATTLE FRONTIER
     mask = text_mask('BATTLE FRONTIER', 12, 1)  # 9 px capitals (v1.42: 7)
     w, h = mask.size
-    x0, top = FRONTIER_CENTER_X - w // 2, FRONTIER_TOP
+    x0, top = FRONTIER_CENTER_X - (w + 1) // 2, FRONTIER_TOP
     fill = set((x0 + x, top + y) for y in range(h) for x in range(w) if mask.getpixel((x, y)))
     out = set()
     for (x, y) in fill:
@@ -68,7 +74,8 @@ def main(src, dst):
                 p = (x + dx, y + dy)
                 if p not in fill:
                     out.add(p)
-    shadow = set((x + 1, y + 1) for (x, y) in out) - fill - out
+    sx, sy = SHADOW_OFFSET
+    shadow = set((x + sx, y + sy) for (x, y) in fill | out) - fill - out
     grad = [B0, B1, B2, B3]
     for (x, y) in shadow:
         if canvas.getpixel((x, y)) == 0:
