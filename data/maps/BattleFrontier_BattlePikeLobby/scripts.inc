@@ -29,8 +29,10 @@ BattleFrontier_BattlePikeLobby_EventScript_QuitWithoutSaving::
 	lockall
 	msgbox BattleFrontier_BattlePikeLobby_Text_FailedToSaveBeforeQuitting, MSGBOX_DEFAULT
 	closemessage
+	goto_if_set FLAG_OPT_KEEP_STREAK, BattleFrontier_BattlePikeLobby_EventScript_KeepStreak @ v1.39: OPTION > KEEP STREAK
 	pike_set PIKE_DATA_WIN_STREAK, 0
 	pike_set PIKE_DATA_WIN_STREAK_ACTIVE, FALSE
+BattleFrontier_BattlePikeLobby_EventScript_KeepStreak::
 	frontier_set FRONTIER_DATA_CHALLENGE_STATUS, 0
 	setvar VAR_TEMP_CHALLENGE_STATUS, 255
 	releaseall

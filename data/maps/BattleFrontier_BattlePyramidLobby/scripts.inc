@@ -32,8 +32,10 @@ BattleFrontier_BattlePyramidLobby_EventScript_QuitWithoutSaving::
 	playse SE_EXP_MAX
 	waitse
 	closemessage
+	goto_if_set FLAG_OPT_KEEP_STREAK, BattleFrontier_BattlePyramidLobby_EventScript_KeepStreak @ v1.39: OPTION > KEEP STREAK
 	pyramid_set PYRAMID_DATA_WIN_STREAK, 0
 	pyramid_set PYRAMID_DATA_WIN_STREAK_ACTIVE, FALSE
+BattleFrontier_BattlePyramidLobby_EventScript_KeepStreak::
 	frontier_set FRONTIER_DATA_CHALLENGE_STATUS, 0
 	setvar VAR_TEMP_CHALLENGE_STATUS, 255
 	releaseall

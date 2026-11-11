@@ -28,8 +28,10 @@ BattleFrontier_BattleArenaLobby_EventScript_QuitWithoutSaving::
 	lockall
 	msgbox BattleFrontier_BattleArenaLobby_Text_DidntSaveBeforeShuttingDown, MSGBOX_DEFAULT
 	closemessage
+	goto_if_set FLAG_OPT_KEEP_STREAK, BattleFrontier_BattleArenaLobby_EventScript_KeepStreak @ v1.39: OPTION > KEEP STREAK
 	arena_set ARENA_DATA_WIN_STREAK, 0
 	arena_set ARENA_DATA_WIN_STREAK_ACTIVE, FALSE
+BattleFrontier_BattleArenaLobby_EventScript_KeepStreak::
 	frontier_set FRONTIER_DATA_CHALLENGE_STATUS, 0
 	setvar VAR_TEMP_CHALLENGE_STATUS, 255
 	releaseall
