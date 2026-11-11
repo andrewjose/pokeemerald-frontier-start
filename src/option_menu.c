@@ -12,6 +12,8 @@
 #include "task.h"
 #include "text.h"
 #include "event_data.h"
+#include "sound.h"
+#include "constants/songs.h"
 #include "list_menu.h"
 #include "text_window.h"
 #include "window.h"
@@ -45,6 +47,7 @@ enum
     MENUITEM_FREETUTORS,
     MENUITEM_FACTORYIVS,
     MENUITEM_KEEPSTREAK,
+    MENUITEM_GUIDE,
     MENUITEM_CANCEL,
     MENUITEM_COUNT,
 };
@@ -52,7 +55,8 @@ enum
 enum
 {
     WIN_HEADER,
-    WIN_OPTIONS
+    WIN_OPTIONS,
+    WIN_GUIDE, // v1.41: the Frontier Start overview, over the bottom of the list
 };
 
 #define YPOS_TEXTSPEED    (MENUITEM_TEXTSPEED * 16)
@@ -70,7 +74,9 @@ enum
 #define SCROLL_ARROW_TAG  0x1100
 
 // The frame tiles, moved past the taller options window
-#define FRAME_TILES       0x320
+#define FRAME_TILES       0x350
+#define GUIDE_TILES       0x360
+#define GUIDE_TOP         15 // tile row; the panel covers rows 15-18 of the list
 
 static void Task_OptionMenuFadeIn(u8 taskId);
 static void Task_OptionMenuProcessInput(u8 taskId);
@@ -94,6 +100,10 @@ static void DamagePreview_DrawChoices(u8 selection);
 static void InfoStart_DrawChoices(u8 selection);
 static void FlagOption_DrawChoices(u8 i, u8 selection);
 static void UpdateScroll(u8 selection);
+static void DrawOptionMenuChoice(const u8 *text, u8 x, u8 y, u8 style);
+static void Task_OptionMenuGuide(u8 taskId);
+static void ShowGuide(void);
+static void HideGuide(void);
 static void DrawHeaderText(void);
 static void DrawOptionMenuTexts(void);
 static void DrawBgWindowFrames(void);
@@ -116,6 +126,35 @@ static const u8 sText_FactoryIVs[] = _("FACTORY IVS");
 static const u8 sText_KeepStreak[] = _("KEEP STREAK");
 static const u8 sText_Fixed[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}FIXED");
 static const u8 sText_Vanilla[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}VANILLA");
+static const u8 sText_Guide[] = _("GUIDE");
+static const u8 sText_GuideRead[] = _("{A_BUTTON} READ");
+
+// v1.41: the overview of Frontier Start, shown before the fighting-style menu
+// on a new game (data/scripts/ArchetypeSelect.inc) and from OPTION > GUIDE.
+const u8 gText_FrontierGuide[] = _(
+    "Welcome to POKéMON EMERALD\n"
+    "BATTLE FRONTIER!\p"
+    "Every facility is open from the\n"
+    "start. Pick a team and go!\p"
+    "Your PC boxes hold ready-made\n"
+    "teams at Lv50 and Lv100, the\l"
+    "legendaries, and Battle Tower\l"
+    "sample teams.\p"
+    "In battle, press L+R to see stats,\n"
+    "IVs, EVs and damage for both sides.\p"
+    "When you pick a move, the foe's\n"
+    "HP bar shows the damage it can do.\p"
+    "Choose EDIT in the party menu or\n"
+    "the PC to change any POKéMON.\p"
+    "The move tutors' house has free\n"
+    "tutors, a move relearner and a\l"
+    "move deleter.\p"
+    "You can switch these features on\n"
+    "and off in OPTION.\p"
+    "Press R + START on the map for\n"
+    "the debug menu.\p"
+    "To read this again, choose GUIDE\n"
+    "in OPTION.");
 
 struct FlagOption
 {
@@ -154,6 +193,7 @@ static const u8 *const sOptionMenuItemsNames[MENUITEM_COUNT] =
     [MENUITEM_FREETUTORS]  = sText_FreeTutors,
     [MENUITEM_FACTORYIVS]  = sText_FactoryIVs,
     [MENUITEM_KEEPSTREAK]  = sText_KeepStreak,
+    [MENUITEM_GUIDE]       = sText_Guide,
     [MENUITEM_CANCEL]      = gText_OptionMenuCancel,
 };
 
@@ -176,6 +216,15 @@ static const struct WindowTemplate sOptionMenuWinTemplates[] =
         .height = MENUITEM_COUNT * 2,
         .paletteNum = 1,
         .baseBlock = 0x36
+    },
+    [WIN_GUIDE] = {
+        .bg = 1, // above the list (BG0), and not scrolled
+        .tilemapLeft = 2,
+        .tilemapTop = GUIDE_TOP,
+        .width = 26,
+        .height = 4,
+        .paletteNum = 1,
+        .baseBlock = GUIDE_TILES
     },
     DUMMY_WIN_TEMPLATE
 };
@@ -327,6 +376,7 @@ void CB2_InitOptionMenu(void)
                 FlagOption_DrawChoices(i, gTasks[taskId].tFlagOptions(i));
             }
         }
+        DrawOptionMenuChoice(sText_GuideRead, GetStringRightAlignXOffset(FONT_NORMAL, sText_GuideRead, 198), MENUITEM_GUIDE * 16, 0);
         sScrollTop = 0;
         ChangeBgY(0, 0, BG_COORD_SET);
         gTasks[taskId].tArrowTaskId = AddScrollIndicatorArrowPairParameterized(SCROLL_ARROW_UP, DISPLAY_WIDTH / 2, LIST_TOP_Y - 6,
@@ -358,6 +408,12 @@ static void Task_OptionMenuProcessInput(u8 taskId)
     {
         if (gTasks[taskId].tMenuSelection == MENUITEM_CANCEL)
             gTasks[taskId].func = Task_OptionMenuSave;
+        else if (gTasks[taskId].tMenuSelection == MENUITEM_GUIDE)
+        {
+            PlaySE(SE_SELECT);
+            ShowGuide();
+            gTasks[taskId].func = Task_OptionMenuGuide;
+        }
     }
     else if (JOY_NEW(B_BUTTON))
     {
@@ -864,4 +920,45 @@ static void DrawBgWindowFrames(void)
     FillBgTilemapBufferRect(1, TILE_BOT_CORNER_R, 28, 19,  1,  1,  7);
 
     CopyBgTilemapBufferToVram(1);
+}
+
+// v1.41: OPTION > GUIDE prints the overview in a panel over the bottom of
+// the list, page by page (A or B for the next page, as in a message box).
+static void ShowGuide(void)
+{
+    // Gray text, like the unselected choices (colors 6 and 7 of this screen's text palette)
+    static const u8 colors[3] = {TEXT_COLOR_WHITE, 6, 7};
+
+    // The panel's top border, then the panel; WIN0 (the highlighted row) shows
+    // only BG0, so turn it off while the panel is up
+    FillBgTilemapBufferRect(1, TILE_TOP_EDGE, 2, GUIDE_TOP - 1, 26, 1, 7);
+    SetGpuReg(REG_OFFSET_WIN0H, 0);
+    SetGpuReg(REG_OFFSET_WIN0V, 0);
+    FillWindowPixelBuffer(WIN_GUIDE, PIXEL_FILL(1));
+    PutWindowTilemap(WIN_GUIDE);
+    CopyWindowToVram(WIN_GUIDE, COPYWIN_FULL);
+    CopyBgTilemapBufferToVram(1);
+    AddTextPrinterParameterized4(WIN_GUIDE, FONT_NORMAL, 0, 1, 0, 0, colors, GetPlayerTextSpeedDelay(), gText_FrontierGuide);
+}
+
+static void HideGuide(void)
+{
+    ClearWindowTilemap(WIN_GUIDE);
+    FillBgTilemapBufferRect(1, 0, 2, GUIDE_TOP - 1, 26, 1, 7);
+    CopyBgTilemapBufferToVram(1);
+}
+
+static void Task_OptionMenuGuide(u8 taskId)
+{
+    RunTextPrinters();
+    if (IsTextPrinterActive(WIN_GUIDE))
+        return;
+    // The last page stays up until A or B
+    if (JOY_NEW(A_BUTTON | B_BUTTON))
+    {
+        PlaySE(SE_SELECT);
+        HideGuide();
+        HighlightOptionMenuItem(gTasks[taskId].tMenuSelection);
+        gTasks[taskId].func = Task_OptionMenuProcessInput;
+    }
 }
