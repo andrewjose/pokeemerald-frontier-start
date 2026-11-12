@@ -3039,5 +3039,8 @@ extern const u8 gText_ArchetypeSand[];
 
 extern const u8 gText_ArchetypeLv50[];
 extern const u8 gText_ArchetypeLv100[];
+extern const u8 gText_PresetVanilla[];
+extern const u8 gText_PresetVanillaPlus[];
+extern const u8 gText_PresetModern[];
 
 #endif // GUARD_STRINGS_H

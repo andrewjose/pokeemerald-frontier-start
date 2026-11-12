@@ -794,6 +794,14 @@ static const struct MenuAction MultichoiceList_ArchetypeLevel[] =
     {gText_ArchetypeLv100},
 };
 
+// v1.45: settings presets on a new game (order = SETTINGS_PRESET_*)
+static const struct MenuAction MultichoiceList_SettingsPreset[] =
+{
+    {gText_PresetVanilla},
+    {gText_PresetVanillaPlus},
+    {gText_PresetModern},
+};
+
 struct MultichoiceListStruct
 {
     const struct MenuAction *list;
@@ -918,6 +926,7 @@ static const struct MultichoiceListStruct sMultichoiceLists[] =
     [MULTI_TAG_MATCH_TYPE]             = MULTICHOICE(MultichoiceList_TagMatchType),
     [MULTI_ARCHETYPE_SELECT]           = MULTICHOICE(MultichoiceList_ArchetypeSelect),
     [MULTI_ARCHETYPE_LEVEL]            = MULTICHOICE(MultichoiceList_ArchetypeLevel),
+    [MULTI_SETTINGS_PRESET]            = MULTICHOICE(MultichoiceList_SettingsPreset),
 };
 
 const u8 *const gStdStrings[] =
