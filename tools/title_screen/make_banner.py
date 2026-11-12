@@ -9,10 +9,26 @@
 #
 #   python3 tools/title_screen/make_banner.py tools/title_screen/vanilla_emerald_version.png \
 #       graphics/title_screen/emerald_version.png
-import sys
+#
+# Needs Pillow and the Poppins Bold font (SIL OFL, https://fonts.google.com/specimen/Poppins).
+# Put Poppins-Bold.ttf next to this script, install it system-wide, or set BANNER_FONT=/path/to/Poppins-Bold.ttf.
+# Only needed to redraw the banner: the generated PNG is committed, so `make` doesn't run this.
+import os, sys
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = '/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf'
+def find_font():
+    if os.environ.get('BANNER_FONT'):
+        return os.environ['BANNER_FONT']
+    here = os.path.dirname(os.path.abspath(__file__))
+    for d in (here, '/usr/share/fonts', '/usr/local/share/fonts', os.path.expanduser('~/.local/share/fonts'),
+              os.path.expanduser('~/Library/Fonts'), '/Library/Fonts', r'C:\Windows\Fonts'):
+        for root, _, files in os.walk(d):
+            if 'Poppins-Bold.ttf' in files:
+                return os.path.join(root, 'Poppins-Bold.ttf')
+    sys.exit('Poppins-Bold.ttf not found: set BANNER_FONT or put it next to make_banner.py '
+             '(free download: https://fonts.google.com/specimen/Poppins)')
+
+FONT = find_font()
 W, H = 128, 64
 FRONTIER_TOP = 27
 # EMERALD moves EMERALD_SHIFT pixels right inside the banner, and the sprites
