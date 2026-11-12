@@ -61,5 +61,7 @@ Every change the hack makes to how the game plays can be switched back:
 
 ## Other things to know
 
+- v1.47 changes nothing you'll see in the game. It updates the code underneath to the latest version of the community project the hack is built on, and builds the game with a newer compiler, the same way every time, so each version is checked automatically before it's released.
+
 - R + START on the map opens a debug menu (warping, items, flags and more).
 - The hack needs a new game. Loading an old Emerald save won't give you the Frontier start.

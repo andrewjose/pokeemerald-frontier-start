@@ -1,0 +1,77 @@
+# NEW GAME → free roam. Timings tuned for v1.47–v1.49 (VANILLA+ preset, RECOMMENDED style).
+# If text or menus change, screenshot each step and recount the A presses.
+wait 900 # Game Freak intro
+tap START
+wait 120
+shot @OUT@/01_logo.ppm
+tap START
+wait 120
+shot @OUT@/02_title.ppm
+tap A
+wait 120 # NEW GAME
+tap A
+wait 90 # BOY
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 120 # naming screen
+shot @OUT@/03_naming.ppm
+tap START
+wait 20
+tap A
+wait 150 # accept the default name
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+tap A
+wait 90
+shot @OUT@/04_preset.ppm
+tap A
+wait 90
+shot @OUT@/05_style.ppm
+tap A
+wait 90
+tap A
+wait 90
+wait 60
+shot @OUT@/06_free_roam.ppm
+expect32 @CALLBACK2@ @WANT@   # gMain.callback2 == CB2_Overworld

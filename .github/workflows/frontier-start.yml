@@ -1,0 +1,48 @@
+name: Frontier Start build
+
+# Builds the hack exactly as releases are built (make modern, arm-none-eabi-gcc),
+# runs the headless NEW GAME smoke test, and uploads the ROM, map, save-usage
+# report and screenshots. pret's own build.yml only covers master.
+
+on:
+  push:
+    branches: [ frontier-start ]
+  pull_request:
+    branches: [ frontier-start ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi \
+                                  libpng-dev libmgba-dev python3-pil
+          arm-none-eabi-gcc --version | head -n1
+
+      - name: Build (make modern)
+        run: |
+          make modern -j"$(nproc)" 2>&1 | tee build.log
+          grep -E '^ *(EWRAM|IWRAM|ROM|SaveBlock1|SaveBlock2|PokemonStorage):' build.log | tee memory-usage.txt
+          md5sum pokeemerald_modern.gba | tee pokeemerald_modern.md5
+
+      - name: Headless smoke test (NEW GAME to free roam)
+        run: tools/headless/smoke_newgame.sh pokeemerald_modern.gba pokeemerald_modern.elf build/smoke
+
+      - name: Upload build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontier-start-${{ github.sha }}
+          path: |
+            pokeemerald_modern.gba
+            pokeemerald_modern.md5
+            pokeemerald_modern.map
+            memory-usage.txt
+            build/smoke/*.png
+            build/smoke/log.txt

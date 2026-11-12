@@ -41,24 +41,26 @@ Current version: **v1.46**. Download the patch from [Releases](../../releases).
 
 ## Building from source
 
-The hack lives on the **`frontier-start`** branch; `master` is an untouched copy of pret's pokeemerald. You need the same toolchain as pret's decomp: see [INSTALL.md](INSTALL.md) for Linux, macOS and Windows (WSL) setup, including `agbcc`.
+The hack lives on the **`frontier-start`** branch; `master` is an untouched copy of pret's pokeemerald. Since v1.47 the hack is built with a modern GCC (`make modern`), not pret's `agbcc`. That's the build that is tested and released.
+
+On Ubuntu 24.04 or WSL:
 
 ```
+sudo apt install build-essential git libpng-dev gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi
 git clone -b frontier-start https://github.com/andrewjose/pokeemerald-frontier-start
 cd pokeemerald-frontier-start
-
-# agbcc, the original GBA C compiler (one time; INSTALL.md has the details)
-git clone https://github.com/pret/agbcc ../agbcc
-(cd ../agbcc && ./build.sh && ./install.sh ../pokeemerald-frontier-start)
-
-make -j$(nproc)
+make modern -j$(nproc)
 ```
 
-This builds `pokeemerald.gba`, the same ROM as the release patch (MD5 above). Don't use `make compare`: it checks against the vanilla ROM's SHA1 (`rom.sha1`), which this ROM doesn't match on purpose.
+This builds `pokeemerald_modern.gba`. On macOS or Windows without WSL, devkitARM works too (see [INSTALL.md](INSTALL.md)). Different GCC versions produce different bytes, so to reproduce a release ROM exactly, use Ubuntu 24.04's `gcc-arm-none-eabi` (13.2.1), the same one the CI uses.
 
-To make your own patch, create a BPS from the clean ROM to `pokeemerald.gba` with Flips (`flips --create --bps clean.gba pokeemerald.gba my-patch.bps`).
+Every push to `frontier-start` runs [`.github/workflows/frontier-start.yml`](.github/workflows/frontier-start.yml): it builds with `make modern`, plays through NEW GAME headlessly to the overworld ([tools/headless](tools/headless/README.md)) and uploads the ROM, its MD5, the map file, the save-block usage report and screenshots as a build artifact. Releases are made from that artifact.
 
-The `source-patches-vX.zip` on each release has the same changes as numbered patches against pret `e178c18bf` + TheXaman's `tx_debug_system`, if you'd rather apply them to your own pokeemerald tree.
+Plain `make` (agbcc) still works but isn't tested anymore. Don't use `make compare`: it checks against the vanilla ROM's SHA1 (`rom.sha1`), which this ROM doesn't match on purpose.
+
+To make your own patch, create a BPS from the clean ROM to `pokeemerald_modern.gba` with Flips (`flips --create --bps clean.gba pokeemerald_modern.gba my-patch.bps`).
+
+The `source-patches-vX.zip` on each release has the same changes as numbered patches against pret `731ad5bfd` + TheXaman's `tx_debug_system` (v1.46 and earlier: pret `e178c18bf`), if you'd rather apply them to your own pokeemerald tree.
 
 Tools that aren't part of the build:
 
@@ -66,6 +68,9 @@ Tools that aren't part of the build:
 - `tools/preset_boxes/bake.py`: regenerates `src/data/preset_boxes.h` from a RAM dump (see [docs/3-technical.md](docs/3-technical.md)).
 
 ## Changelog
+
+### Maintenance (v1.47)
+- **v1.47**: Rebased onto current pret/pokeemerald (`731ad5bfd`, 2026-10-01). No gameplay changes. Built with `make modern` (GCC 13) instead of agbcc, with a GitHub Actions build and a headless NEW GAME smoke test on every push. The branch now shares pret's real commit history, so future upstream syncs are ordinary merges.
 
 ### Polish and presentation (v1.40–v1.46)
 - **v1.46**: All eight badges on a new game.
