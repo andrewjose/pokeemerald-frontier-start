@@ -127,6 +127,7 @@ static const u8 sText_KeepStreak[] = _("KEEP STREAK");
 static const u8 sText_Fixed[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}FIXED");
 static const u8 sText_Vanilla[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}VANILLA");
 static const u8 sText_Guide[] = _("GUIDE");
+static const u8 sText_TextSpeedInstant[] = _("{COLOR GREEN}{SHADOW LIGHT_GREEN}INST");
 static const u8 sText_GuideRead[] = _("{A_BUTTON} READ");
 
 // v1.41: the overview of Frontier Start, shown before the fighting-style menu
@@ -609,7 +610,7 @@ static u8 TextSpeed_ProcessInput(u8 selection)
 {
     if (JOY_NEW(DPAD_RIGHT))
     {
-        if (selection <= 1)
+        if (selection < OPTIONS_TEXT_SPEED_INSTANT)
             selection++;
         else
             selection = 0;
@@ -621,34 +622,43 @@ static u8 TextSpeed_ProcessInput(u8 selection)
         if (selection != 0)
             selection--;
         else
-            selection = 2;
+            selection = OPTIONS_TEXT_SPEED_INSTANT;
 
         sArrowPressed = TRUE;
     }
     return selection;
 }
 
+// v1.45: four choices (INST added). They start further left than the other
+// rows' choices to fit, evenly spaced from x 84 to the right edge at 198.
+#define TEXTSPEED_LEFT  84
+#define TEXTSPEED_RIGHT 198
+
 static void TextSpeed_DrawChoices(u8 selection)
 {
-    u8 styles[3];
-    s32 widthSlow, widthMid, widthFast, xMid;
+    static const u8 *const choices[] = {gText_TextSpeedSlow, gText_TextSpeedMid, gText_TextSpeedFast, sText_TextSpeedInstant};
+    u8 styles[ARRAY_COUNT(choices)];
+    s32 widths[ARRAY_COUNT(choices)];
+    s32 total, gap, x;
+    u8 i;
 
-    styles[0] = 0;
-    styles[1] = 0;
-    styles[2] = 0;
-    styles[selection] = 1;
+    total = 0;
+    for (i = 0; i < ARRAY_COUNT(choices); i++)
+    {
+        styles[i] = (i == selection);
+        widths[i] = GetStringWidth(FONT_NORMAL, choices[i], 0);
+        total += widths[i];
+    }
+    gap = (TEXTSPEED_RIGHT - TEXTSPEED_LEFT - total) / (s32)(ARRAY_COUNT(choices) - 1);
 
-    DrawOptionMenuChoice(gText_TextSpeedSlow, 104, YPOS_TEXTSPEED, styles[0]);
-
-    widthSlow = GetStringWidth(FONT_NORMAL, gText_TextSpeedSlow, 0);
-    widthMid = GetStringWidth(FONT_NORMAL, gText_TextSpeedMid, 0);
-    widthFast = GetStringWidth(FONT_NORMAL, gText_TextSpeedFast, 0);
-
-    widthMid -= 94;
-    xMid = (widthSlow - widthMid - widthFast) / 2 + 104;
-    DrawOptionMenuChoice(gText_TextSpeedMid, xMid, YPOS_TEXTSPEED, styles[1]);
-
-    DrawOptionMenuChoice(gText_TextSpeedFast, GetStringRightAlignXOffset(FONT_NORMAL, gText_TextSpeedFast, 198), YPOS_TEXTSPEED, styles[2]);
+    x = TEXTSPEED_LEFT;
+    for (i = 0; i < ARRAY_COUNT(choices); i++)
+    {
+        if (i == ARRAY_COUNT(choices) - 1)
+            x = TEXTSPEED_RIGHT - widths[i];
+        DrawOptionMenuChoice(choices[i], x, YPOS_TEXTSPEED, styles[i]);
+        x += widths[i] + gap;
+    }
 }
 
 static u8 BattleScene_ProcessInput(u8 selection)
@@ -961,4 +971,109 @@ static void Task_OptionMenuGuide(u8 taskId)
         HighlightOptionMenuItem(gTasks[taskId].tMenuSelection);
         gTasks[taskId].func = Task_OptionMenuProcessInput;
     }
+}
+
+// ---------------------------------------------------------------------------
+// v1.45: settings presets, chosen on a new game before the fighting style
+// (data/scripts/ArchetypeSelect.inc). Every option can still be changed in
+// OPTION afterwards.
+// ---------------------------------------------------------------------------
+struct SettingsPreset
+{
+    u8 textSpeed;
+    u8 frameType;
+    u8 sound;
+    u8 battleStyle;
+    bool8 battleSceneOff;
+    bool8 damagePreviewOff;
+    bool8 infoScreenOff;     // FLAG_OPT_INFO_SCREEN_OFF
+    bool8 editOff;           // FLAG_OPT_EDIT_OFF
+    bool8 tutorsCostBP;      // FLAG_OPT_TUTOR_COSTS_BP
+    bool8 factoryIVVanilla;  // FLAG_OPT_FACTORY_IV_VANILLA
+    bool8 keepStreak;        // FLAG_OPT_KEEP_STREAK
+};
+
+static const struct SettingsPreset sSettingsPresets[] =
+{
+    [SETTINGS_PRESET_VANILLA] =
+    {
+        // Emerald's defaults (SetDefaultOptions in pret's new_game.c), and
+        // every Frontier Start feature and rule change off
+        .textSpeed = OPTIONS_TEXT_SPEED_MID,
+        .frameType = 0,
+        .sound = OPTIONS_SOUND_MONO,
+        .battleStyle = OPTIONS_BATTLE_STYLE_SHIFT,
+        .battleSceneOff = FALSE,
+        .damagePreviewOff = TRUE,
+        .infoScreenOff = TRUE,
+        .editOff = TRUE,
+        .tutorsCostBP = TRUE,
+        .factoryIVVanilla = TRUE,
+        .keepStreak = FALSE,
+    },
+    [SETTINGS_PRESET_VANILLA_PLUS] =
+    {
+        // Frontier Start's defaults up to v1.44
+        .textSpeed = OPTIONS_TEXT_SPEED_FAST,
+        .frameType = 1,
+        .sound = OPTIONS_SOUND_STEREO,
+        .battleStyle = OPTIONS_BATTLE_STYLE_SHIFT,
+        .battleSceneOff = FALSE,
+        .damagePreviewOff = FALSE,
+        .infoScreenOff = FALSE,
+        .editOff = FALSE,
+        .tutorsCostBP = FALSE,
+        .factoryIVVanilla = FALSE,
+        .keepStreak = FALSE,
+    },
+    [SETTINGS_PRESET_MODERN] =
+    {
+        // every convenience on: instant text, no battle animations, SET
+        // (as in newer games), and the streak kept on save-and-quit
+        .textSpeed = OPTIONS_TEXT_SPEED_INSTANT,
+        .frameType = 1,
+        .sound = OPTIONS_SOUND_STEREO,
+        .battleStyle = OPTIONS_BATTLE_STYLE_SET,
+        .battleSceneOff = TRUE,
+        .damagePreviewOff = FALSE,
+        .infoScreenOff = FALSE,
+        .editOff = FALSE,
+        .tutorsCostBP = FALSE,
+        .factoryIVVanilla = FALSE,
+        .keepStreak = TRUE,
+    },
+};
+
+static void SetFlagTo(u16 flag, bool8 set)
+{
+    if (set)
+        FlagSet(flag);
+    else
+        FlagClear(flag);
+}
+
+void ApplySettingsPreset(void)
+{
+    const struct SettingsPreset *preset;
+
+    if (gSpecialVar_0x8004 >= ARRAY_COUNT(sSettingsPresets))
+        gSpecialVar_0x8004 = SETTINGS_PRESET_VANILLA_PLUS;
+    preset = &sSettingsPresets[gSpecialVar_0x8004];
+
+    gSaveBlock2Ptr->optionsTextSpeed = preset->textSpeed;
+    gSaveBlock2Ptr->optionsWindowFrameType = preset->frameType;
+    gSaveBlock2Ptr->optionsSound = preset->sound;
+    gSaveBlock2Ptr->optionsBattleStyle = preset->battleStyle;
+    gSaveBlock2Ptr->optionsBattleSceneOff = preset->battleSceneOff;
+    gSaveBlock2Ptr->optionsButtonMode = OPTIONS_BUTTON_MODE_NORMAL;
+    gSaveBlock2Ptr->optionsDamagePreviewOff = preset->damagePreviewOff;
+    gSaveBlock2Ptr->optionsInfoStartYours = FALSE;
+    SetFlagTo(FLAG_OPT_INFO_SCREEN_OFF, preset->infoScreenOff);
+    SetFlagTo(FLAG_OPT_EDIT_OFF, preset->editOff);
+    SetFlagTo(FLAG_OPT_TUTOR_COSTS_BP, preset->tutorsCostBP);
+    SetFlagTo(FLAG_OPT_FACTORY_IV_VANILLA, preset->factoryIVVanilla);
+    SetFlagTo(FLAG_OPT_KEEP_STREAK, preset->keepStreak);
+
+    SetPokemonCryStereo(gSaveBlock2Ptr->optionsSound);
+    LoadMessageBoxAndBorderGfx(); // the new frame for the windows that follow
 }

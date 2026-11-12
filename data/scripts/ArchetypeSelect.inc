@@ -19,6 +19,17 @@ ArchetypeSelect_Script::
 
 @ v1.41: the overview first (also under OPTION > GUIDE), then the menu
 	call FrontierGuide_ShowText
+
+@ v1.45: settings preset (OPTION can change any of them later)
+	msgbox ArchetypeSelect_Text_PresetInfo, MSGBOX_DEFAULT
+ArchetypeSelect_ChoosePreset::
+	message ArchetypeSelect_Text_PresetAsk
+	waitmessage
+	multichoicedefault 0, 0, MULTI_SETTINGS_PRESET, 1, FALSE
+	goto_if_eq VAR_RESULT, MULTI_B_PRESSED, ArchetypeSelect_ChoosePreset
+	copyvar VAR_0x8004, VAR_RESULT
+	special ApplySettingsPreset
+
 	message ArchetypeSelect_Text_Intro
 	waitmessage
 
@@ -39,6 +50,20 @@ ArchetypeSelect_ChooseArchetype::
 
 ArchetypeSelect_Text_Intro:
 	.string "Choose your fighting style.$"
+
+ArchetypeSelect_Text_PresetInfo:
+	.string "First, pick your settings.\n"
+	.string "You can change any of them in OPTION.\p"
+	.string "VANILLA: EMERALD's own settings,\n"
+	.string "with the new features off.\p"
+	.string "VANILLA+: the new features on,\n"
+	.string "with FAST text.\p"
+	.string "MODERN: everything on, plus\n"
+	.string "INSTANT text, no battle animations,\l"
+	.string "SET battles and streaks kept on quit.$"
+
+ArchetypeSelect_Text_PresetAsk:
+	.string "Which settings would you like?$"
 
 @ ---------------------------------------------------------------------------
 @ v1.41: overview of the hack, shown before the fighting-style menu. The text

@@ -124,6 +124,7 @@
 #define MULTI_TAG_MATCH_TYPE               113
 #define MULTI_ARCHETYPE_SELECT             114
 #define MULTI_ARCHETYPE_LEVEL              115
+#define MULTI_SETTINGS_PRESET              116 // v1.45
 
 // Lilycove SS Tidal Multichoice Selections
 #define SSTIDAL_SELECTION_SLATEPORT        0

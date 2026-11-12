@@ -550,3 +550,4 @@ gSpecials::
 	def_special GivePresetParty_Sun
 	def_special GivePresetParty_Sand
 	def_special HideMapNamePopUpWindow
+	def_special ApplySettingsPreset

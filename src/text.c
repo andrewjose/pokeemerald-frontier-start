@@ -77,6 +77,7 @@ static const u8 sWindowVerticalScrollSpeeds[] = {
     [OPTIONS_TEXT_SPEED_SLOW] = 1,
     [OPTIONS_TEXT_SPEED_MID] = 2,
     [OPTIONS_TEXT_SPEED_FAST] = 4,
+    [OPTIONS_TEXT_SPEED_INSTANT] = 16, // a whole line in one frame
 };
 
 static const struct GlyphWidthFunc sGlyphWidthFuncs[] =
@@ -327,6 +328,23 @@ void RunTextPrinters(void)
             if (sTextPrinters[i].active)
             {
                 u16 renderCmd = RenderFont(&sTextPrinters[i]);
+                // v1.45: INSTANT text speed. A printer at the player's speed (delay 1,
+                // stored as 0) keeps going until it waits for a button, pauses,
+                // scrolls or finishes, and the window is copied to VRAM once.
+                if (renderCmd == RENDER_PRINT && sTextPrinters[i].textSpeed == 0
+                 && GetPlayerTextSpeed() == OPTIONS_TEXT_SPEED_INSTANT)
+                {
+                    u32 n;
+                    for (n = 0; n < 0x400 && renderCmd == RENDER_PRINT; n++)
+                    {
+                        if (sTextPrinters[i].callback != NULL)
+                            sTextPrinters[i].callback(&sTextPrinters[i].printerTemplate, renderCmd);
+                        renderCmd = RenderFont(&sTextPrinters[i]);
+                    }
+                    CopyWindowToVram(sTextPrinters[i].printerTemplate.windowId, COPYWIN_GFX);
+                    if (renderCmd == RENDER_PRINT)
+                        renderCmd = RENDER_UPDATE; // already copied
+                }
                 switch (renderCmd)
                 {
                 case RENDER_PRINT:

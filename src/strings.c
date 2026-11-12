@@ -1832,3 +1832,6 @@ const u8 gText_ArchetypeSun[]        = _("SUN");
 const u8 gText_ArchetypeSand[]       = _("SAND");
 const u8 gText_ArchetypeLv50[]  = _("LV. 50");
 const u8 gText_ArchetypeLv100[] = _("LV. 100");
+const u8 gText_PresetVanilla[]     = _("VANILLA");
+const u8 gText_PresetVanillaPlus[] = _("VANILLA+");
+const u8 gText_PresetModern[]      = _("MODERN");
