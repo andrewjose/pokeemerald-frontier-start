@@ -3,9 +3,9 @@
 // Press L+R on the battle action menu (FIGHT/BAG/POKEMON/RUN) or the move menu
 // to open a full-screen view of every Pokemon on both sides of the battle:
 // IVs, EVs, nature, stats, in-battle stat stages, ability, held item, HP,
-// status, Hidden Power and moves with PP. The screen opens on the player's
-// side, on the Pokemon being given a command (v1.34; it used to open on the
-// opponent's side).
+// status, Hidden Power and moves with PP. The screen opens on the opponent's
+// side (v1.37); OPTION > INFO START = YOURS opens it on the player's side, on
+// the Pokemon being given a command.
 //
 // Controls: D-pad = previous/next Pokemon, L/R = switch side,
 //           A = toggle the stats table / damage calc (in battle),

@@ -102,7 +102,7 @@ Hooks in `battle_controller_player.c`:
 - Header: player name vs. trainer class + name as the battle prints them (two opponents: "A & B"; wild: "WILD POKEMON"). Long names fall back to the small font, then to the bare name. Party icons sit right of the header.
 - Controls: D-pad = Pokémon, L/R = side, A = stats ↔ damage view, SELECT = next target (damage) or side (stats), B/START = exit.
 - List mode: `ShowMonListInfoScreen(sides, numSides, startSide, startSlot, exitCallback)` with `struct InfoScreenSideArgs` (party pointer, count, title, short name, backdrop color, optional pick order, `asHealed`).
-- Battle Factory (`battle_factory_screen.c`): `Select_Task_OpenInfoScreen` shows all six rentals with pick markers; `CB2_InitSelectScreen` rebuilds the screen from `sFactorySelectScreen` on return. `Swap_Task_OpenInfoScreen` shows the incoming opponent's Pokémon "as healed" plus yours, and `Swap_RestoreAfterInfoScreen` restores sub-screen, cursor and button highlight (`fromInfoScreen`, `infoReturnCursor`). The opponent name on the swap screen comes from `frontier.trainerIds`, since the next opponent is already chosen.
+- Battle Factory (`battle_factory_screen.c`): `Select_Task_OpenInfoScreen` shows all six rentals with pick markers; `CB2_InitSelectScreen` rebuilds the screen from `sFactorySelectScreen` on return. `Swap_Task_OpenInfoScreen` shows the swap candidates (the Pokémon of the trainer you just beat) "as healed" plus yours, and `Swap_RestoreAfterInfoScreen` restores sub-screen, cursor and button highlight (`fromInfoScreen`, `infoReturnCursor`). Their side is titled with that trainer's class and name, read from `frontier.trainerIds[curChallengeBattleNum - 1]`: by the time the swap screen runs, `gTrainerBattleOpponent_A` already holds the next opponent. In the Battle Tent the title is FOE'S.
 
 ## Damage calculator
 
@@ -128,7 +128,7 @@ API: `PokemonEditor_IsAllowed()` (false in the Battle Pyramid and Battle Pike, o
 
 Entry points: `MENU_EDIT` in the field party menu (`actions[]` grew to 9) and the PC's Pokémon menu (`SCREEN_CHANGE_EDIT`, `Task_EditMon`); the debug menu's Party add, Party edit, PC edit and Give > Pokémon (complex). The old complex-give flow stays in `debug.c` as `DebugAction_Give_PokemonComplex_Old` (unused).
 
-Personality-derived fields (nature, gender, shiny) are changed by rebuilding the Pokémon with `CreateMon` around a new personality and copying every other field back.
+Personality-derived fields (nature, gender, shiny) are changed in place. `FindPersonality` builds a personality with the wanted gender (low byte) and shininess (high half from the OT ID), retrying random values until `personality % 25` gives the nature; `RebuildWithPersonality` then re-keys the Pokémon with `SetBoxMonPersonalityAndOtId` (the same helper the baked boxes use) and recalculates its stats. Every other field is untouched.
 
 ## Options and save layout
 
