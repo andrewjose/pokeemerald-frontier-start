@@ -4,6 +4,8 @@ A ROM hack of Pokémon Emerald, built on the [pret/pokeemerald](https://github.c
 
 Current version: **v1.46**. Download the patch from [Releases](../../releases).
 
+> **Help wanted: playtesting.** This needs more people playing it. If you find a bug, crash or anything that looks wrong, please [open an issue on GitHub](https://github.com/andrewjose/pokeemerald-frontier-start/issues) and include the version, your emulator or flash cart, what you were doing (facility, menu or battle) and a screenshot or save if you can.
+
 ## Documentation
 
 - [docs/1-overview.md](docs/1-overview.md): what the hack does, for players
@@ -28,7 +30,7 @@ Current version: **v1.46**. Download the patch from [Releases](../../releases).
 - **Title screen:** the original EMERALD lettering with BATTLE FRONTIER added in classic blue.
 - **Debug menu:** R + START on the map opens TheXaman's debug menu.
 
-## How to play
+## How to install and play
 
 1. Get a clean **Pokémon Emerald (USA)** ROM. This repo doesn't provide one.
    MD5 `605b89b67018abcea91e693a4dd25be3`
