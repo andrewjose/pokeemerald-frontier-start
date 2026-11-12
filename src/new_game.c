@@ -212,6 +212,14 @@ void NewGameInitData(void)
     FlagSet(FLAG_HIDE_BATTLE_FRONTIER_RECEPTION_GATE_SCOTT); // Scott not blocking gate
     FlagSet(FLAG_HIDE_BATTLE_FRONTIER_SUDOWOODO);            // Sudowoodo not blocking
     FlagSet(FLAG_ENABLE_PROF_BIRCH_MATCH_CALL);
+    // v1.46: all eight badges, so the HMs in the bag work in the field and
+    // Pokemon with another OT (traded, or rented from the record holders) obey
+    {
+        u32 badge;
+
+        for (badge = FLAG_BADGE01_GET; badge <= FLAG_BADGE08_GET; badge++)
+            FlagSet(badge);
+    }
     EnableNationalPokedex();
     // Skip the Scott intro cutscene at the Reception Gate
     VarSet(VAR_HAS_ENTERED_BATTLE_FRONTIER, 1);
