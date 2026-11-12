@@ -16,8 +16,8 @@
 //
 // Nature, gender and shininess all come from the personality value, which
 // also keys the encryption of the rest of the Pokemon's data. Changing any of
-// them rebuilds the Pokemon with CreateMon around a new personality and then
-// copies every other field back, so nothing else is lost.
+// them picks a new personality (FindPersonality) and re-keys the Pokemon in
+// place with SetBoxMonPersonalityAndOtId, so nothing else is lost.
 
 #include "global.h"
 #include "event_data.h"
