@@ -14,6 +14,8 @@ In v1.47 the branch was rebased: its commits were replayed on top of the current
 
 v1.47 also switched compilers. pret builds with `agbcc` because matching retail requires Game Freak's compiler, but this hack stopped matching retail at v1.0, so there is nothing to gain from it. The hack now builds with a current `arm-none-eabi-gcc` (`make modern`), which generates better code, turns on pret's fixes for undefined behaviour in the original code (`UBFIX`), and is what pokeemerald-expansion uses. It is also the only build that has been tested since. A GitHub Actions workflow builds every push the same way and runs a headless smoke test: an emulator library (libmgba) is driven by a script of button presses through a new game, and the test checks that the game's main callback ends up on the overworld, the way you'd assert on a state machine's final state. The one open question with a compiler switch is old saves: a battery save is the save structs copied byte for byte, so it only loads if the new compiler lays the structs out identically. Both compilers follow the same ARM layout rules, but loading a v1.46 save into the new build is the check.
 
+v1.48 only updates the CI workflow's GitHub Actions to their current major versions, which run on Node 24; the ROM is byte-identical to v1.47.
+
 ## GBA constraints that shape the code
 
 - **No operating system and tiny RAM.** 256 KB of slow work RAM (EWRAM) and 32 KB of fast RAM (IWRAM). The game has a small heap, so new screens allocate their state when they open and free it when they close, and they check for allocation failure.

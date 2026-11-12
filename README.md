@@ -2,7 +2,7 @@
 
 A ROM hack of Pokémon Emerald, built on the [pret/pokeemerald](https://github.com/pret/pokeemerald) decompilation, that starts a new game at the **Battle Frontier** with a competitive team, so you can go straight to the facilities.
 
-Current version: **v1.46**. Download the patch from [Releases](../../releases).
+Current version: **v1.48**. Download the patch from [Releases](../../releases).
 
 > **Help wanted: playtesting.** This needs more people playing it. If you find a bug, crash or anything that looks wrong, please [open an issue on GitHub](https://github.com/andrewjose/pokeemerald-frontier-start/issues) and include the version, your emulator or flash cart, what you were doing (facility, menu or battle) and a screenshot or save if you can.
 
@@ -34,10 +34,10 @@ Current version: **v1.46**. Download the patch from [Releases](../../releases).
 
 1. Get a clean **Pokémon Emerald (USA)** ROM. This repo doesn't provide one.
    MD5 `605b89b67018abcea91e693a4dd25be3`
-2. Download `pokeemerald-frontier-start-v1.46.bps` from [Releases](../../releases).
+2. Download `pokeemerald-frontier-start-v1.48.bps` from [Releases](../../releases).
 3. Apply it with [Rom Patcher JS](https://www.marcrobledo.com/RomPatcher.js/) (in your browser) or [Flips](https://github.com/Alcaro/Flips).
-4. Check the result: MD5 `6b0559abe18d52d705dc6445aa337b74`
-5. Play in any GBA emulator (mGBA recommended) or on a flash cart. Start a **new game**: an old Emerald save won't get the Frontier start.
+4. Check the result: MD5 `ba6b8bbd3d658808216a8ee188e6f50d`
+5. Play in any GBA emulator (mGBA recommended) or on a flash cart. Start a **new game**: an old Emerald save won't get the Frontier start. Since v1.47 the ROM is built with a different compiler; saves from v1.46 and earlier haven't been tested with it yet, so keep a backup of your `.sav` before loading one.
 
 ## Building from source
 
@@ -69,7 +69,8 @@ Tools that aren't part of the build:
 
 ## Changelog
 
-### Maintenance (v1.47)
+### Maintenance (v1.47–v1.48)
+- **v1.48**: The CI build uses current GitHub Actions (`checkout` and `upload-artifact` v7, Node 24). The ROM is identical to v1.47.
 - **v1.47**: Rebased onto current pret/pokeemerald (`731ad5bfd`, 2026-10-01). No gameplay changes. Built with `make modern` (GCC 13) instead of agbcc, with a GitHub Actions build and a headless NEW GAME smoke test on every push. The branch now shares pret's real commit history, so future upstream syncs are ordinary merges.
 
 ### Polish and presentation (v1.40–v1.46)

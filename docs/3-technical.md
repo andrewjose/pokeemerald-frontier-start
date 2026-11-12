@@ -1,6 +1,6 @@
 # Battle Frontier Start: technical reference
 
-For ROM hackers and decomp contributors who want to study, port or extend the hack. Everything here refers to the `frontier-start` branch at v1.47.
+For ROM hackers and decomp contributors who want to study, port or extend the hack. Everything here refers to the `frontier-start` branch at v1.48.
 
 ## Base and build
 
@@ -10,7 +10,7 @@ For ROM hackers and decomp contributors who want to study, port or extend the ha
   - Save usage at v1.47 (`make modern` link report): SaveBlock1 15752/15872 B (99.24%), SaveBlock2 3884/3968 B (97.88%), PokemonStorage 33744/35712 B (94.49%). New option bits continue to go into existing padding.
 - Original base (v1.46 and earlier) details: pret/pokeemerald `e178c18bf` (the branch carries its own copy of that history: its first parent `bafe1b27e` has the identical tree), merged with TheXaman's `tx_debug_system` (`Merge xaman/tx_debug_system`), then a fix-up commit for bit-rot between the two (`02-xaman-bitrot-fixes`: e.g. `InBattlePyramid_()` in `battle_setup.c`).
 - Compiler (v1.47+): `make modern` with Ubuntu 24.04 `gcc-arm-none-eabi` 13.2.1 / binutils 2.42 / newlib; links with `ld_script_modern.ld` (wildcard object placement, so the explicit `.o` lines added to `ld_script.ld` only matter for agbcc). Output `pokeemerald_modern.gba`. `MODERN=1` implies `UBFIX` (`include/config.h`). Through v1.46 the compiler was `agbcc` (`make`, `pokeemerald.gba`; v1.46 release MD5 `6b0559abe18d52d705dc6445aa337b74`); agbcc still builds but is untested. `make compare` fails by design.
-- CI: `.github/workflows/frontier-start.yml` on pushes/PRs to `frontier-start`: `make modern`, save/memory report, MD5, then `tools/headless/smoke_newgame.sh` (libmgba 0.10.2; script `tools/headless/newgame.txt`; asserts `*(u32*)(gMain+4) == CB2_Overworld|1` after the NEW GAME chain; symbols resolved from the ELF with `arm-none-eabi-nm`). Artifacts: ROM, `.md5`, `.map`, `memory-usage.txt`, screenshots, log.
+- CI: `.github/workflows/frontier-start.yml` on pushes/PRs to `frontier-start`: `make modern`, save/memory report, MD5, then `tools/headless/smoke_newgame.sh` (libmgba 0.10.2; script `tools/headless/newgame.txt`; asserts `*(u32*)(gMain+4) == CB2_Overworld|1` after the NEW GAME chain; symbols resolved from the ELF with `arm-none-eabi-nm`). Artifacts: ROM, `.md5`, `.map`, `memory-usage.txt`, screenshots, log. Uses `actions/checkout@v7` and `actions/upload-artifact@v7` (Node 24) since v1.48; v1.47 used `@v4` (Node 20, deprecated on GitHub runners). v1.48 ROM == v1.47 ROM (MD5 `ba6b8bbd3d658808216a8ee188e6f50d`).
 - Save compatibility agbcc → modern: not yet verified. Load a v1.46 (agbcc) `.sav` in the modern build and check party, PC boxes, OPTION bits and streaks.
 - New translation units are placed explicitly in `ld_script.ld` (`.text` and `.rodata` of `battle_info_screen.o`, `battle_info_damage.o`, `battle_damage_preview.o`, `pokemon_editor.o`).
 - `include/constants/map_groups.h` shows a large diff against the merge base. It's generated from `data/maps/map_groups.json` by the build, not hand-edited.
